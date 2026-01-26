@@ -1,7 +1,7 @@
-# 🔁 ComfyUI Sequential Batcher & Video Loop Master (Beta v0.9.2)
+# 🔁 ComfyUI Sequential Batcher & Video Loop Master (Beta v0.9.3)
 
 > [!IMPORTANT]
-> This version is currently in **BETA**. We have renamed the project from "Job Iterator" to **Sequential Batcher** to better reflect its purpose: processing batches one-by-one to save VRAM.
+> This version is currently in **BETA**. We have fully transitioned the terminology from "Job" to **Batch** to align with ComfyUI standards and the project name.
 
 The ultimate tool for creating complex iterative workflows and frame-by-frame video processing in ComfyUI. Designed to handle huge tasks (like high-res video generation with Wan2.2 or LTX Video) without crashing your GPU by using intelligent sequential looping instead of VRAM-heavy batching.
 
@@ -23,7 +23,7 @@ Standard ComfyUI batching processes everything at once (4D tensors). For video o
 ## 📖 Key Concepts
 
 - **SEQUENCE**: A simple list of values (numbers, strings, etc.).
-- **BATCH (formerly JOB)**: A structured collection of "steps". Each step has named **Attributes**.
+- **BATCH**: A structured collection of "steps". Each step has named **Attributes**.
 - **Iteration**: The magic happens in nodes like `Batch To List`, `Image Batch To List`, or `Latent Batch To List`. When ComfyUI sees a "List" output from these nodes, it executes all downstream nodes once for each item in that list.
 
 ---
@@ -47,7 +47,11 @@ Video models produce many frames that can easily exceed 24GB VRAM.
   - *Input*: `input` (Any), `count` (INT).
   - *Output*: `output` (List of the same input).
 
-### 🛠️ Batch Category (`🔁 Sequential Batcher/Job`)
+### 🛠️ Batch Category (`🔁 Sequential Batcher/Batch`)
+- **📂 Load CSV**: Loads a CSV file as a Batch.
+  - *Input*: `path` (File location), `delimiter`, `quotechar`.
+  - *Optional Input*: `index` (To pick a specific row).
+  - *Output*: `batch` (The full list), `current_attributes` (Dict of the selected row), `count` (Total rows).
 - **🛠️ Make Batch**: Turns a sequence into a "Batch" object.
   - *Input*: `sequence` (The data), `name` (The attribute name, e.g., "cfg_scale").
 - **🖇️ Combine Batches**: Merges multiple batches.
@@ -64,7 +68,20 @@ Video models produce many frames that can easily exceed 24GB VRAM.
 
 ---
 
-## 💡 Pro Tips
-- Use **🖇️ Combine Batches** in `product` mode to create XY Plots (e.g., test every Prompt against every CFG scale).
-- Use **🔍 Model Finder** to automatically iterate through a folder of LoRAs or Checkpoints.
-- Combine with **⌨️ Interact** to pause your workflow at a specific frame and inspect variables in the terminal.
+## 💡 Pro Tips & Use Cases
+
+### 📝 Using CSV for Prompts and Scenes
+You can create a CSV with columns like `prompt`, `negative_prompt`, and `seed`.
+1. Use **📂 Load CSV** to load your file.
+2. Connect `batch` to **🔄 Batch To List**.
+3. Use **📥 Get Attribute** to pull the `prompt` into your CLIP Text Encode.
+4. Each row in your CSV will be processed as one "frame" or "job" in the sequence.
+
+### 🎬 Scene Timings for Video
+If you have a CSV with `frame_start` and `prompt`, you can use it to change prompts at specific points in a video generation loop.
+
+### 🧪 XY Plots
+Use **🖇️ Combine Batches** in `product` mode to create XY Plots (e.g., test every Prompt against every CFG scale).
+
+### 🔍 Automatic Model Iteration
+Use **🔍 Model Finder** to automatically iterate through a folder of LoRAs or Checkpoints.
