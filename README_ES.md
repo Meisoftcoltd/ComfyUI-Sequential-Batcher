@@ -48,10 +48,12 @@ Los modelos de vídeo generan muchos fotogramas que pueden superar fácilmente l
   - *Salida*: `output` (Lista de la misma entrada repetida).
 
 ### 🛠️ Categoría Lote (`🔁 Sequential Batcher/Batch`)
-- **📂 Load CSV**: Carga un archivo CSV como un Lote (Batch).
+- **📂 Load CSV**: Carga un archivo CSV como un Lote (Batch). Ahora incluye una vista previa de la tabla en el flujo de trabajo.
   - *Entrada*: `path` (Ubicación del archivo), `delimiter`, `quotechar`.
   - *Entrada Opcional*: `index` (Para elegir una fila específica).
   - *Salida*: `batch` (La lista completa), `current_attributes` (Diccionario de la fila seleccionada), `count` (Total de filas).
+- **📊 Preview Batch**: Muestra una tabla del contenido del lote en el flujo de trabajo.
+  - *Entrada*: `batch`, `index` (Resaltar fila específica), `max_rows`.
 - **🛠️ Make Batch**: Convierte una secuencia en un objeto "Batch".
   - *Entrada*: `sequence` (Los datos), `name` (El nombre del atributo, ej: "cfg_scale").
 - **🖇️ Combine Batches**: Fusiona varios lotes.
