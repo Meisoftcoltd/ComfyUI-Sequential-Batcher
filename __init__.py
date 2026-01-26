@@ -1,4 +1,4 @@
-__version__ = "0.9.2-beta"
+__version__ = "0.9.3-beta"
 
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
@@ -12,7 +12,7 @@ def register_node(c, display_name=None):
     return c
 
 
-from . import sequence, paths, job, image, debug, loop
+from . import sequence, paths, batch, image, debug, loop
 
 # Display name mappings with emojis
 NODE_DISPLAY_NAME_MAPPINGS.update({
@@ -26,17 +26,18 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "Join": "🔗 Join",
     "ModelFinder": "🔍 Model Finder",
     
-    # Job (Renamed to Batch)
-    "MakeJob": "🛠️ Make Batch",
-    "CombineJobs": "🖇️ Combine Batches",
-    "EnumerateJob": "🔢 Enumerate Batch",
-    "GetJobStep": "📍 Get Batch Step",
+    # Batch
+    "MakeBatch": "🛠️ Make Batch",
+    "CombineBatches": "🖇️ Combine Batches",
+    "EnumerateBatch": "🔢 Enumerate Batch",
+    "GetBatchStep": "📍 Get Batch Step",
     "FormatAttributes": "📝 Format Attributes",
     "GetAttribute": "📥 Get Attribute",
     "GetAttributeInt": "📥 Get Attribute (Int)",
     "GetAttributeFloat": "📥 Get Attribute (Float)",
     "GetAttributeString": "📥 Get Attribute (String)",
-    "JobToList": "🔄 Batch To List",
+    "BatchToList": "🔄 Batch To List",
+    "LoadCSV": "📂 Load CSV",
     
     # Image
     "JoinImageBatch": "🖼️ Join Image Batch",
@@ -58,4 +59,13 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     # Loop
     "LoopIndex": "🔁 Sequential Loop Index",
     "Repeat": "🔁 Repeat",
+})
+
+# Backward compatibility for "Job" naming
+NODE_CLASS_MAPPINGS.update({
+    "MakeJob": batch.MakeBatch,
+    "CombineJobs": batch.CombineBatches,
+    "EnumerateJob": batch.EnumerateBatch,
+    "GetJobStep": batch.GetBatchStep,
+    "JobToList": batch.BatchToList,
 })

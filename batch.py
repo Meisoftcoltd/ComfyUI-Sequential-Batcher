@@ -1,14 +1,14 @@
 import collections
 import itertools
-
-from execution import PromptExecutor
+import csv
+import os
 
 from . import register_node
 
 
 @register_node
-class MakeJob:
-    """Turns a sequence into a job with one attribute."""
+class MakeBatch:
+    """Turns a sequence into a batch with one attribute."""
 
     @classmethod
     def INPUT_TYPES(s):
@@ -19,10 +19,10 @@ class MakeJob:
             },
         }
 
-    RETURN_TYPES = ("JOB", "INT")
-    RETURN_NAMES = ("job", "count")
+    RETURN_TYPES = ("BATCH", "INT")
+    RETURN_NAMES = ("batch", "count")
     FUNCTION = "go"
-    CATEGORY = "🔁 Sequential Batcher/Job"
+    CATEGORY = "🔁 Sequential Batcher/Batch"
 
     def merge_dicts(self, *dicts):
         #return collections.ChainMap(*reversed(dicts))
@@ -34,17 +34,17 @@ class MakeJob:
 
 
 @register_node
-class CombineJobs(MakeJob):
-    """Combines multiple jobs."""
+class CombineBatches(MakeBatch):
+    """Combines multiple batches."""
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "a": ("JOB", ),
+                "a": ("BATCH", ),
                 "method": (("zip", "product"), {"default": "zip"}),
             },
             "optional": {
-                x: ("JOB", ) for x in ('b', 'c', 'd', 'e')
+                x: ("BATCH", ) for x in ('b', 'c', 'd', 'e')
             }
         }
 
@@ -55,30 +55,30 @@ class CombineJobs(MakeJob):
 
 
 @register_node
-class EnumerateJob(MakeJob):
-    """Combines multiple jobs."""
+class EnumerateBatch(MakeBatch):
+    """Combines multiple batches."""
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "job": ("JOB", ),
+                "batch": ("BATCH", ),
                 "name": ("STRING", {"default": ''}),
             },
         }
 
-    def go(self, job, name):
-        result = [self.merge_dicts(step, {name: n}) for n, step in enumerate(job)]
+    def go(self, batch, name):
+        result = [self.merge_dicts(step, {name: n}) for n, step in enumerate(batch)]
         return (result, len(result))
 
 
 @register_node
-class GetJobStep:
-    """Gets the job step by number."""
+class GetBatchStep:
+    """Gets the batch step by number."""
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "job": ("JOB", ),
+                "batch": ("BATCH", ),
                 "step": ("INT", {"default": 0}),
                 "wrap": (("repeat", "clamp"), {"default": "repeat"}),
             },
@@ -86,16 +86,16 @@ class GetJobStep:
     RETURN_TYPES = ("ATTRIBUTES", )
     RETURN_NAMES = ("attributes", )
     FUNCTION = "go"
-    CATEGORY = "🔁 Sequential Batcher/Job"
+    CATEGORY = "🔁 Sequential Batcher/Batch"
 
-    def go(self, job, step, wrap):
+    def go(self, batch, step, wrap):
         if wrap == 'repeat':
             while step < 0:
-                step += len(job)
-            step = step % len(job)
+                step += len(batch)
+            step = step % len(batch)
         elif wrap == 'clamp':
-            step = max(min(step, len(job)), 0)
-        return (job[step], )
+            step = max(min(step, len(batch)-1), 0)
+        return (batch[step], )
 
 
 @register_node
@@ -113,7 +113,7 @@ class FormatAttributes:
     RETURN_TYPES = ("STRING", )
     RETURN_NAMES = ("string", )
     FUNCTION = "go"
-    CATEGORY = "🔁 Sequential Batcher/Job"
+    CATEGORY = "🔁 Sequential Batcher/Batch"
 
     def go(self, attributes, format):
         return (format.format(**attributes), )
@@ -139,7 +139,7 @@ class GetAttribute:
     RETURN_TYPES = (AnyType("*"), )
     RETURN_NAMES = ("value", )
     FUNCTION = "go"
-    CATEGORY = "🔁 Sequential Batcher/Job"
+    CATEGORY = "🔁 Sequential Batcher/Batch"
 
     def go(self, attributes, name):
         return (attributes[name], )
@@ -160,13 +160,58 @@ for t in ('INT', 'FLOAT', 'STRING'):
 
 
 @register_node
-class JobToList:
-    """Converts a job into a list."""
+class LoadCSV:
+    """Loads a CSV file into a batch."""
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "job": ("JOB",),
+                "path": ("STRING", {"default": "prompt.csv"}),
+                "delimiter": (["comma", "tab", "semicolon"], {"default": "comma"}),
+                "quotechar": (["\"", "'"], {"default": "\""}),
+            },
+            "optional": {
+                "index": ("INT", {"default": -1, "min": -1, "max": 999999}),
+            }
+        }
+
+    RETURN_TYPES = ("BATCH", "ATTRIBUTES", "INT")
+    RETURN_NAMES = ("batch", "current_attributes", "count")
+    FUNCTION = "go"
+    CATEGORY = "🔁 Sequential Batcher/Batch"
+
+    def go(self, path, delimiter, quotechar, index=-1):
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"CSV file not found: {path}")
+
+        delim = {
+            "comma": ",",
+            "tab": "\t",
+            "semicolon": ";",
+        }[delimiter]
+
+        batch = []
+        with open(path, mode='r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f, delimiter=delim, quotechar=quotechar)
+            for row in reader:
+                # Clean up keys and values
+                clean_row = {k.strip() if k else k: v.strip() if v else v for k, v in row.items()}
+                batch.append(clean_row)
+
+        count = len(batch)
+        current_attributes = batch[index % count] if count > 0 and index != -1 else (batch[0] if count > 0 else {})
+
+        return (batch, current_attributes, count)
+
+
+@register_node
+class BatchToList:
+    """Converts a batch into a list."""
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "batch": ("BATCH",),
             },
         }
 
@@ -174,7 +219,7 @@ class JobToList:
     RETURN_NAMES = ("attributes",)
     OUTPUT_IS_LIST = (True,)
     FUNCTION = "go"
-    CATEGORY = "🔁 Sequential Batcher/Job"
+    CATEGORY = "🔁 Sequential Batcher/Batch"
 
-    def go(self, job):
-        return (job,)
+    def go(self, batch):
+        return (batch,)

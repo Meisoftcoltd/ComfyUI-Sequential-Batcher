@@ -1,7 +1,7 @@
-# 🔁 ComfyUI Sequential Batcher & Video Loop Master (Beta v0.9.2)
+# 🔁 ComfyUI Sequential Batcher & Video Loop Master (Beta v0.9.3)
 
 > [!IMPORTANT]
-> Esta versión se encuentra actualmente en fase **BETA**. Hemos renombrado el proyecto de "Job Iterator" a **Sequential Batcher** para reflejar mejor su propósito: procesar lotes uno a uno para ahorrar VRAM.
+> Esta versión se encuentra actualmente en fase **BETA**. Hemos completado la transición de la terminología de "Job" a **Batch** (Lote) para alinearnos con los estándares de ComfyUI y el nombre del proyecto.
 
 La herramienta definitiva para crear flujos de trabajo iterativos complejos y procesamiento de vídeo fotograma a fotograma en ComfyUI. Diseñada para manejar tareas pesadas (como generación de vídeo de alta resolución con Wan2.2 o LTX Video) sin colapsar tu GPU, utilizando bucles secuenciales inteligentes en lugar de procesamiento por lotes masivo que agota la VRAM.
 
@@ -23,7 +23,7 @@ El procesamiento por lotes (batch) estándar de ComfyUI procesa todo a la vez (t
 ## 📖 Conceptos Clave
 
 - **SEQUENCE (Secuencia)**: Una lista simple de valores (números, textos, etc.).
-- **BATCH (Lote, anteriormente JOB)**: Una colección estructurada de "pasos". Cada paso tiene **Atributos** con nombre.
+- **BATCH (Lote)**: Una colección estructurada de "pasos". Cada paso tiene **Atributos** con nombre.
 - **Iteración**: La magia ocurre en nodos como `Batch To List`, `Image Batch To List` o `Latent Batch To List`. Cuando ComfyUI detecta una salida tipo "Lista" de estos nodos, ejecuta todos los nodos conectados a continuación una vez por cada elemento de la lista.
 
 ---
@@ -39,7 +39,7 @@ Los modelos de vídeo generan muchos fotogramas que pueden superar fácilmente l
 
 ## 🔢 Referencia Detallada de Nodos
 
-### Categoría Bucles (`🔁 Sequential Batcher/Loop`)
+### 🔄 Categoría Bucles (`🔁 Sequential Batcher/Loop`)
 - **🔁 Sequential Loop Index**: La forma más sencilla de iniciar un bucle.
   - *Entrada*: `count` (Cuántas veces ejecutar).
   - *Salida*: `index` (0, 1, 2...). Útil para semillas (seeds) o selección de elementos.
@@ -47,7 +47,11 @@ Los modelos de vídeo generan muchos fotogramas que pueden superar fácilmente l
   - *Entrada*: `input` (Cualquiera), `count` (INT).
   - *Salida*: `output` (Lista de la misma entrada repetida).
 
-### Categoría Lote (`🔁 Sequential Batcher/Job`)
+### 🛠️ Categoría Lote (`🔁 Sequential Batcher/Batch`)
+- **📂 Load CSV**: Carga un archivo CSV como un Lote (Batch).
+  - *Entrada*: `path` (Ubicación del archivo), `delimiter`, `quotechar`.
+  - *Entrada Opcional*: `index` (Para elegir una fila específica).
+  - *Salida*: `batch` (La lista completa), `current_attributes` (Diccionario de la fila seleccionada), `count` (Total de filas).
 - **🛠️ Make Batch**: Convierte una secuencia en un objeto "Batch".
   - *Entrada*: `sequence` (Los datos), `name` (El nombre del atributo, ej: "cfg_scale").
 - **🖇️ Combine Batches**: Fusiona varios lotes.
@@ -55,7 +59,7 @@ Los modelos de vídeo generan muchos fotogramas que pueden superar fácilmente l
 - **🔄 Batch To List**: **CRÍTICO**. Convierte un Lote en un flujo de atributos que activa el bucle secuencial.
 - **📥 Get Attribute**: Extrae un valor específico del paso actual del lote por su nombre.
 
-### Categoría Imagen y Latente (`🔁 Sequential Batcher/Image` & `/Latent`)
+### 🖼️ Categoría Imagen y Latente (`🔁 Sequential Batcher/Image` & `/Latent`)
 - **🖼️ Image Batch To List**: Divide un tensor [N,H,W,C] en N imágenes separadas.
 - **🖼️ Image List To Batch**: Reconstruye un lote a partir de imágenes iteradas.
 - **🎞️ Latent Batch To List**: Divide latentes de vídeo fotograma a fotograma para un procesamiento seguro en VRAM.
@@ -64,7 +68,20 @@ Los modelos de vídeo generan muchos fotogramas que pueden superar fácilmente l
 
 ---
 
-## 💡 Consejos Pro
-- Usa **🖇️ Combine Batches** en modo `product` para crear "XY Plots" (ej: probar cada Prompt contra cada valor de CFG).
-- Usa **🔍 Model Finder** para iterar automáticamente a través de una carpeta de LoRAs o Checkpoints.
-- Combina con **⌨️ Interact** para pausar tu flujo en un fotograma específico e inspeccionar variables en la terminal.
+## 💡 Consejos Pro y Casos de Uso
+
+### 📝 Uso de CSV para Prompts y Escenas
+Puedes crear un CSV con columnas como `prompt`, `negative_prompt` y `seed`.
+1. Usa **📂 Load CSV** para cargar tu archivo.
+2. Conecta `batch` a **🔄 Batch To List**.
+3. Usa **📥 Get Attribute** para pasar el `prompt` a tu CLIP Text Encode.
+4. Cada fila de tu CSV se procesará como un "fotograma" o "trabajo" en la secuencia.
+
+### 🎬 Tiempos de Escena para Vídeo
+Si tienes un CSV con `frame_start` y `prompt`, puedes usarlo para cambiar los prompts en puntos específicos de un bucle de generación de vídeo.
+
+### 🧪 XY Plots
+Usa **🖇️ Combine Batches** en modo `product` para crear "XY Plots" (ej: probar cada Prompt contra cada valor de CFG).
+
+### 🔍 Iteración Automática de Modelos
+Usa **🔍 Model Finder** para iterar automáticamente a través de una carpeta de LoRAs o Checkpoints.
