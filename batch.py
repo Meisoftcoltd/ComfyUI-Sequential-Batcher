@@ -6,6 +6,50 @@ import os
 from . import register_node
 
 
+def format_batch_as_table(batch, current_index=-1, max_rows=20):
+    if not batch:
+        return "(Empty Batch)"
+
+    # Get all unique keys across all rows
+    keys = []
+    for row in batch:
+        for k in row.keys():
+            if k not in keys:
+                keys.append(k)
+
+    if not keys:
+        return "(Empty rows)"
+
+    # Truncate values for display
+    def trunc(v, l=20):
+        s = str(v).replace('\n', ' ')
+        return (s[:l-3] + "...") if len(s) > l else s
+
+    # Calculate widths
+    widths = {k: len(str(k)) for k in keys}
+    rows_to_show = batch[:max_rows]
+    for row in rows_to_show:
+        for k in keys:
+            widths[k] = max(widths[k], len(trunc(row.get(k, ""))))
+
+    # Build header
+    header = "| " + " | ".join(str(k).ljust(widths[k]) for k in keys) + " |"
+    sep = "|-" + "-|-".join("-" * widths[k] for k in keys) + "-|"
+
+    idx_to_highlight = (current_index % len(batch)) if (len(batch) > 0 and current_index != -1) else (0 if len(batch) > 0 else -1)
+
+    lines = [header, sep]
+    for i, row in enumerate(rows_to_show):
+        prefix = ">" if i == idx_to_highlight else " "
+        line = f"{prefix}| " + " | ".join(trunc(row.get(k, "")).ljust(widths[k]) for k in keys) + " |"
+        lines.append(line)
+
+    if len(batch) > max_rows:
+        lines.append(f"... and {len(batch) - max_rows} more rows")
+
+    return "\n".join(lines)
+
+
 @register_node
 class MakeBatch:
     """Turns a sequence into a batch with one attribute."""
@@ -157,8 +201,6 @@ for t in ('INT', 'FLOAT', 'STRING'):
     ))
 
 
-
-
 @register_node
 class LoadCSV:
     """Loads a CSV file into a batch."""
@@ -177,6 +219,7 @@ class LoadCSV:
 
     RETURN_TYPES = ("BATCH", "ATTRIBUTES", "INT")
     RETURN_NAMES = ("batch", "current_attributes", "count")
+    OUTPUT_NODE = True
     FUNCTION = "go"
     CATEGORY = "🔁 Sequential Batcher/Batch"
 
@@ -201,7 +244,35 @@ class LoadCSV:
         count = len(batch)
         current_attributes = batch[index % count] if count > 0 and index != -1 else (batch[0] if count > 0 else {})
 
-        return (batch, current_attributes, count)
+        table = format_batch_as_table(batch, index)
+
+        return {"ui": {"text": [table]}, "result": (batch, current_attributes, count)}
+
+
+@register_node
+class PreviewBatch:
+    """Shows a table of the batch."""
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "batch": ("BATCH",),
+            },
+            "optional": {
+                "index": ("INT", {"default": -1, "min": -1, "max": 999999}),
+                "max_rows": ("INT", {"default": 20, "min": 1, "max": 1000}),
+            }
+        }
+
+    RETURN_TYPES = ("BATCH",)
+    RETURN_NAMES = ("batch",)
+    OUTPUT_NODE = True
+    FUNCTION = "go"
+    CATEGORY = "🔁 Sequential Batcher/Batch"
+
+    def go(self, batch, index=-1, max_rows=20):
+        table = format_batch_as_table(batch, index, max_rows)
+        return {"ui": {"text": [table]}, "result": (batch,)}
 
 
 @register_node

@@ -38,6 +38,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "GetAttributeString": "📥 Get Attribute (String)",
     "BatchToList": "🔄 Batch To List",
     "LoadCSV": "📂 Load CSV",
+    "PreviewBatch": "📊 Preview Batch",
     
     # Image
     "JoinImageBatch": "🖼️ Join Image Batch",

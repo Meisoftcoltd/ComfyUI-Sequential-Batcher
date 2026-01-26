@@ -48,10 +48,12 @@ Video models produce many frames that can easily exceed 24GB VRAM.
   - *Output*: `output` (List of the same input).
 
 ### 🛠️ Batch Category (`🔁 Sequential Batcher/Batch`)
-- **📂 Load CSV**: Loads a CSV file as a Batch.
+- **📂 Load CSV**: Loads a CSV file as a Batch. Now includes a table preview in the workflow.
   - *Input*: `path` (File location), `delimiter`, `quotechar`.
   - *Optional Input*: `index` (To pick a specific row).
   - *Output*: `batch` (The full list), `current_attributes` (Dict of the selected row), `count` (Total rows).
+- **📊 Preview Batch**: Displays a table of the batch content in the workflow.
+  - *Input*: `batch`, `index` (Highlight specific row), `max_rows`.
 - **🛠️ Make Batch**: Turns a sequence into a "Batch" object.
   - *Input*: `sequence` (The data), `name` (The attribute name, e.g., "cfg_scale").
 - **🖇️ Combine Batches**: Merges multiple batches.
