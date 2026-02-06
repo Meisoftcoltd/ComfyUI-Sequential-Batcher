@@ -11,11 +11,7 @@ def format_batch_as_table(batch, current_index=-1, max_rows=20):
         return "(Empty Batch)"
 
     # Get all unique keys across all rows
-    keys = []
-    for row in batch:
-        for k in row.keys():
-            if k not in keys:
-                keys.append(k)
+    keys = list(dict.fromkeys(itertools.chain.from_iterable(row.keys() for row in batch)))
 
     if not keys:
         return "(Empty rows)"
