@@ -113,7 +113,7 @@ class Permutations:
     CATEGORY = "🔁 Sequential Batcher/Sequence"
 
     def go(self, sequence, count):
-        return ([x for x in itertools.permutations(sequence, count)], )
+        return (itertools.permutations(sequence, count), )
 
 
 @register_node
