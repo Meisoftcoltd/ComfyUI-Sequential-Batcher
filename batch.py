@@ -2,6 +2,7 @@ import collections
 import itertools
 import csv
 import os
+import folder_paths
 
 from . import register_node
 
@@ -220,7 +221,19 @@ class LoadCSV:
     CATEGORY = "🔁 Sequential Batcher/Batch"
 
     def go(self, path, delimiter, quotechar, index=-1):
-        if not os.path.exists(path):
+        input_dir = folder_paths.get_input_directory()
+        if input_dir is None:
+            raise ValueError("Input directory not found in ComfyUI configuration.")
+
+        if os.path.isabs(path):
+            full_path = os.path.normpath(path)
+        else:
+            full_path = os.path.normpath(os.path.join(input_dir, path))
+
+        if os.path.commonpath([input_dir, full_path]) != os.path.normpath(input_dir):
+            raise ValueError(f"Access denied: Path '{path}' is outside the input directory.")
+
+        if not os.path.exists(full_path):
             raise FileNotFoundError(f"CSV file not found: {path}")
 
         delim = {
@@ -230,7 +243,7 @@ class LoadCSV:
         }[delimiter]
 
         batch = []
-        with open(path, mode='r', encoding='utf-8-sig') as f:
+        with open(full_path, mode='r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f, delimiter=delim, quotechar=quotechar)
             for row in reader:
                 # Clean up keys and values
