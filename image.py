@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 from . import register_node
 
@@ -151,7 +152,6 @@ class StringToImage:
     CATEGORY = "🔁 Sequential Batcher/Image"
 
     def render(self, text, width, height, colour, background):
-        from PIL import Image, ImageDraw, ImageFont
         font = ImageFont.load_default()
         img = Image.new("RGB", (width, height), background)
         draw = ImageDraw.Draw(img)
@@ -182,7 +182,6 @@ class ProgressBar:
     CATEGORY = "🔁 Sequential Batcher/Image"
 
     def render(self, progress, padding, width, height, colour, background):
-        from PIL import Image, ImageDraw
         img = Image.new("RGB", (width, height), background)
         draw = ImageDraw.Draw(img)
         draw.rectangle((padding, padding, width - padding - 1, height - padding - 1), outline=colour)
