@@ -205,7 +205,7 @@ class ImageBatchToList:
     CATEGORY = "🔁 Sequential Batcher/Image"
 
     def go(self, images):
-        return ([images[i:i+1] for i in range(images.shape[0])],)
+        return (list(torch.split(images, 1, dim=0)),)
 
 
 @register_node
