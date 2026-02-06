@@ -1,4 +1,5 @@
 import pathlib
+import glob
 from folder_paths import folder_names_and_paths
 from . import register_node
 
@@ -31,15 +32,39 @@ class ModelFinder:
 
     def go(self, filenames, model_type, recursive, skip_missing):
         paths = [pathlib.Path(folder) for folder in folder_names_and_paths[model_type][0]]
+
+        available_files = []
+        file_index = {}
+        for p in paths:
+            for f in (p.rglob('*') if recursive else p.glob('*')):
+                try:
+                    rel = f.relative_to(p)
+                    available_files.append(rel)
+                    if rel.name not in file_index:
+                        file_index[rel.name] = []
+                    file_index[rel.name].append(rel)
+                except ValueError:
+                    pass
+
         result = []
         for fn in filenames:
             if '..' in fn:
                 raise Exception(f'".." is not allowed: {fn}.')
-            found = False
-            for f in self.find_models(fn, paths, recursive):
-                found = True
-                result.append(f)
-            if not found and not skip_missing:
+
+            candidates = []
+            if glob.has_magic(fn):
+                for f in available_files:
+                    if f.match(fn):
+                        candidates.append(f)
+            else:
+                potential = file_index.get(pathlib.Path(fn).name, [])
+                for f in potential:
+                    if f.match(fn):
+                        candidates.append(f)
+
+            if candidates:
+                result.extend(candidates)
+            elif not skip_missing:
                 raise Exception(f'Could not find file: {fn}')
 
         return ([str(f) for f in result], [f.stem for f in result])
