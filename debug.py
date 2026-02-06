@@ -60,7 +60,13 @@ class Quitter:
 
 @register_node
 class Interact:
-    """Opens an interactive REPL whenever the node is evaluated."""
+    """
+    Opens an interactive REPL whenever the node is evaluated.
+
+    SECURITY WARNING: This node allows arbitrary code execution.
+    To enable it, you must set the environment variable:
+    COMFYUI_SB_ENABLE_INTERACTIVE_DEBUG=1
+    """
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -75,6 +81,10 @@ class Interact:
     OUTPUT_NODE = True
 
     def interact(self, **kwargs):
+        if os.environ.get("COMFYUI_SB_ENABLE_INTERACTIVE_DEBUG", "").lower() not in ("true", "1", "yes"):
+            print(f"[{self.__class__.__name__}] Interactive debugging is disabled. Set COMFYUI_SB_ENABLE_INTERACTIVE_DEBUG=1 to enable.")
+            return ()
+
         if sys.__stdout__.isatty():
             with RestoreStdStreams():
                 code.interact(
