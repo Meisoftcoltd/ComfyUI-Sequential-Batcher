@@ -34,6 +34,13 @@ Los modelos de vídeo generan muchos fotogramas que pueden superar fácilmente l
 1. **Split (Dividir)**: Usa `Latent Batch To List` para convertir tu latente de vídeo en una lista de fotogramas individuales.
 2. **Process (Procesar)**: Conecta a tu KSampler o VAE Decoder. ComfyUI procesará el Fotograma 1, luego el 2, luego el 3... ahorrando memoria.
 3. **Gather (Reunir)**: Usa `Latent List To Batch` (o `Image List To Batch` si decodificaste primero) para reconstruir el lote completo de vídeo para guardarlo.
+4. **Stitch (Unir con VHS)**: Para unir chunks pesados de vídeo secuencialmente:
+   - *Opción A (Matemática)*: `Range` -> `MakeBatch` (atributo: "skip_frames") -> `BatchToList` -> `GetAttributeInt` (nombre: "skip_frames") conectado a `VHS_LoadVideo`.
+   - *Opción B (Por CSV)*: `LoadCSV` (con una columna `skip_frames`) -> `BatchToList` -> `GetAttributeInt`.
+   - Conecta la salida de `VHS_VideoCombine` (específicamente la salida `VHS_FILENAMES`) al nodo **FFmpeg Video Stitcher** (`video_paths`). ¡El Stitcher esperará a que terminen todos los chunks y los unirá automáticamente!
+
+> [!WARNING]
+> **Prevención OOM (Aviso de Memoria):** Aunque `BatchToList` soluciona el paso de datos, a nivel de VRAM de PyTorch, se debe seguir gestionando la memoria. Es altamente recomendable usar el nodo **easy cleanGpuUsed** (o similar) después del decodificador (VAE) en cada ciclo del Batch. Sin la liberación manual de VRAM en cada iteración, el bucle secuencial acumulará basura en la tarjeta gráfica y eventualmente provocará un error de "Out of Memory".
 
 ---
 
