@@ -75,6 +75,11 @@ Los modelos de vídeo generan muchos fotogramas que pueden superar fácilmente l
 - **🎞️ Latent List To Batch**: Une fotogramas individuales de nuevo en un lote latente de vídeo.
 - **⏳ Progress Bar**: Genera un indicador visual de progreso.
 
+### 🎞️ Categoría Vídeo (`🔁 Sequential Batcher/Video`)
+- **🎞️ FFmpeg Video Stitcher**: Nodo final en un bucle de vídeo. Espera a que termine todo el lote secuencial y une los fragmentos de vídeo utilizando FFmpeg sin recodificar.
+  - *Entrada*: `video_paths` (Lista de VHS_FILENAMES), `output_filename` (Cadena de texto).
+  - *Salida*: `final_video_path` (Ruta del vídeo ensamblado).
+
 ---
 
 ## 💡 Consejos Pro y Casos de Uso
