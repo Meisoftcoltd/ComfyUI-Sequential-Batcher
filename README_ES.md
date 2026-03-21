@@ -79,6 +79,9 @@ Los modelos de vídeo generan muchos fotogramas que pueden superar fácilmente l
 - **🎞️ FFmpeg Video Stitcher**: Nodo final en un bucle de vídeo. Espera a que termine todo el lote secuencial y une los fragmentos de vídeo utilizando FFmpeg sin recodificar.
   - *Entrada*: `video_paths` (Lista de VHS_FILENAMES), `output_filename` (Cadena de texto).
   - *Salida*: `final_video_path` (Ruta del vídeo ensamblado).
+- **🎞️ Incremental Auto-Stitcher**: Nodo de ensamblaje incremental diseñado específicamente para ciclos de Auto Queue. Se ejecuta inmediatamente después de que cada fragmento es guardado (usando la señal de `VHS_FILENAMES`) y une continuamente todos los fragmentos disponibles que coincidan con un prefijo dado.
+  - *Entrada*: `trigger` (VHS_FILENAMES, actúa solo como una señal de aviso), `video_prefix` (Cadena de texto), `output_filename` (Cadena de texto).
+  - *Salida*: `final_video_path` (Ruta del vídeo de copia de seguridad unido incrementalmente).
 
 ---
 
