@@ -90,3 +90,62 @@ class FFmpegVideoStitcher:
             raise Exception(f"Error crítico de FFmpeg al unir los fragmentos: {e.stderr.decode()}")
 
         return (final_output, )
+
+@register_node
+class IncrementalVideoStitcher:
+    """Une los vídeos generados hasta el momento cada vez que termina un lote de Auto Queue."""
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                # Recibe el Filenames del VHS SOLO como un 'trigger' (gatillo) para
+                # obligar a ComfyUI a ejecutar este nodo DESPUÉS de guardar el fragmento.
+                "trigger": ("VHS_FILENAMES", ),
+                "video_prefix": ("STRING", {"default": "SCAIL_Fragmento_"}),
+                "output_filename": ("STRING", {"default": "Pelicula_Copia_Seguridad.mp4"}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", )
+    RETURN_NAMES = ("final_video_path", )
+    OUTPUT_NODE = True
+    FUNCTION = "stitch_incremental"
+    CATEGORY = "🔁 Sequential Batcher/Video"
+
+    def stitch_incremental(self, trigger, video_prefix, output_filename):
+        if not shutil.which("ffmpeg"):
+            print("[Sequential Batcher] Error: FFmpeg no está instalado.")
+            return ("", )
+
+        out_dir = folder_paths.get_output_directory()
+
+        # 1. Buscar todos los fragmentos generados hasta ahora con ese prefijo
+        search_pattern = os.path.join(out_dir, f"{video_prefix}*.mp4")
+        import glob
+        files = sorted(glob.glob(search_pattern))
+
+        if not files:
+            print("[Sequential Batcher] No se encontraron fragmentos para unir aún.")
+            return ("", )
+
+        # 2. Crear archivo CSV/TXT para FFmpeg
+        list_file_path = os.path.join(out_dir, "batch_concat_list.txt")
+        with open(list_file_path, 'w', encoding='utf-8') as f:
+            for video in files:
+                f.write(f"file '{os.path.abspath(video)}'\n")
+
+        # 3. Ensamblar sobrescribiendo el archivo final
+        final_output = os.path.join(out_dir, output_filename)
+        ffmpeg_cmd = [
+            "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+            "-i", list_file_path, "-c", "copy", final_output
+        ]
+
+        try:
+            subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            print(f"[Sequential Batcher] Backup Incremental: {len(files)} vídeos unidos en {output_filename}")
+        except subprocess.CalledProcessError as e:
+            print(f"[Sequential Batcher] Error de FFmpeg: {e.stderr.decode()}")
+
+        return (final_output, )

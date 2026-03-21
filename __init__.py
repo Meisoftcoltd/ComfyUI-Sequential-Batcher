@@ -55,6 +55,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     
     # Video
     "FFmpegVideoStitcher": "🎞️ FFmpeg Video Stitcher",
+    "IncrementalVideoStitcher": "🎞️ Incremental Auto-Stitcher",
 
     # Debug
     "Stringify": "🧵 Stringify",
