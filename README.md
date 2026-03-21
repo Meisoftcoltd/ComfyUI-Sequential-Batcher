@@ -75,6 +75,11 @@ Video models produce many frames that can easily exceed 24GB VRAM.
 - **🎞️ Latent List To Batch**: Merges individual frames back into a video latent batch.
 - **⏳ Progress Bar**: Generates a visual progress indicator.
 
+### 🎞️ Video Category (`🔁 Sequential Batcher/Video`)
+- **🎞️ FFmpeg Video Stitcher**: Final node in a video loop. Waits for the entire sequential batch to finish and stitches the video chunks together using FFmpeg without re-encoding.
+  - *Input*: `video_paths` (List of VHS_FILENAMES), `output_filename` (String).
+  - *Output*: `final_video_path` (Path to the stitched video).
+
 ---
 
 ## 💡 Pro Tips & Use Cases
