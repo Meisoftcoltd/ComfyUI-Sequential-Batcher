@@ -34,6 +34,13 @@ Video models produce many frames that can easily exceed 24GB VRAM.
 1. **Split**: Use `Latent Batch To List` to turn your video latent into a list of single frames.
 2. **Process**: Connect to your KSampler/VAE Decoder. ComfyUI will process Frame 1, then Frame 2, then Frame 3...
 3. **Gather**: Use `Latent List To Batch` (or `Image List To Batch` if you decoded first) to reconstruct the full video batch for saving.
+4. **Stitch (VHS Combine)**: To stitch heavy video chunks sequentially:
+   - *Option A (Math)*: `Range` -> `MakeBatch` (attribute: "skip_frames") -> `BatchToList` -> `GetAttributeInt` (name: "skip_frames") connected to `VHS_LoadVideo`.
+   - *Option B (CSV)*: `LoadCSV` (with a `skip_frames` column) -> `BatchToList` -> `GetAttributeInt`.
+   - Connect the output of `VHS_VideoCombine` (specifically the `VHS_FILENAMES` output) to the **FFmpeg Video Stitcher** node (`video_paths`). The Stitcher will wait for all chunks to finish and combine them automatically!
+
+> [!WARNING]
+> **OOM Prevention (Memory Warning):** While `BatchToList` solves the data passing issue, you must still manage PyTorch VRAM. It is highly recommended to use the **easy cleanGpuUsed** node (or similar VRAM clearing nodes) after the VAE Decoder in each cycle of the Batch. Without manual VRAM clearing in each iteration, the sequential loop will accumulate garbage in your graphics card and eventually cause an Out of Memory error.
 
 ---
 

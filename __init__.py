@@ -12,7 +12,7 @@ def register_node(c, display_name=None):
     return c
 
 
-from . import sequence, paths, batch, image, debug, loop
+from . import sequence, paths, batch, image, debug, loop, video
 
 # Display name mappings with emojis
 NODE_DISPLAY_NAME_MAPPINGS.update({
@@ -53,6 +53,9 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "LatentBatchToList": "🎞️ Latent Batch To List",
     "LatentListToBatch": "🎞️ Latent List To Batch",
     
+    # Video
+    "FFmpegVideoStitcher": "🎞️ FFmpeg Video Stitcher",
+
     # Debug
     "Stringify": "🧵 Stringify",
     "Interact": "⌨️ Interact",
