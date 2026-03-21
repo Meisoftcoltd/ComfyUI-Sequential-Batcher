@@ -6,55 +6,78 @@ from . import register_node
 
 @register_node
 class FFmpegVideoStitcher:
-    """Toma una lista de rutas de vídeo generadas en un Batch secuencial, crea un TXT/CSV y los une con FFmpeg."""
+    """Nodo final: Espera a que termine todo el lote secuencial y une los vídeos con FFmpeg."""
 
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                # VHS_FILENAMES proviene del nodo de guardado de vídeo
                 "video_paths": ("VHS_FILENAMES", ),
-                "output_filename": ("STRING", {"default": "Video_SCAIL_Completo.mp4"}),
+                "output_filename": ("STRING", {"default": "SCAIL_Final_Completo.mp4"}),
             },
         }
 
     RETURN_TYPES = ("STRING", )
     RETURN_NAMES = ("final_video_path", )
-    # Al ser INPUT_IS_LIST = True, ComfyUI acumulará los resultados de todos los
-    # pasos del Batch y ejecutará esto al final del todo.
+
+    # CRÍTICO: Obliga a ComfyUI a recolectar todas las ejecuciones del loop antes de actuar.
     INPUT_IS_LIST = True
     FUNCTION = "stitch_videos"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
     def stitch_videos(self, video_paths, output_filename):
-        # Aplanar la lista de rutas, ya que VHS_FILENAMES suele venir anidado
+        # 1. Comprobación estricta de dependencias
+        if not shutil.which("ffmpeg"):
+            raise Exception("FFmpeg no está instalado o no se encuentra en el PATH del sistema. Por favor, instálalo para unir los vídeos.")
+
+        # Ensure video_paths is a valid list before iteration
+        if not video_paths or not isinstance(video_paths, list):
+            raise Exception("Error: 'video_paths' inválido. Se esperaba una lista.")
+
+        # 2. Aplanar la lista de rutas generadas (VHS_FILENAMES genera listas anidadas)
         flat_paths = []
         for path_group in video_paths:
+            if not isinstance(path_group, list):
+                # Sometimes path_group might be a string directly depending on how it's passed
+                if isinstance(path_group, str) and path_group.endswith(".mp4"):
+                    flat_paths.append(path_group)
+                continue
+
             for p in path_group:
                 if isinstance(p, str) and p.endswith(".mp4"):
                     flat_paths.append(p)
 
-        # Como INPUT_IS_LIST es True, output_filename viene como lista, tomamos el primero
-        out_name = output_filename[0] if isinstance(output_filename, list) else output_filename
+        # Ensure output_filename is safe to read
+        if isinstance(output_filename, list):
+            if not output_filename:
+                out_name = "SCAIL_Final_Completo.mp4"
+            else:
+                out_name = output_filename[0]
+        else:
+            out_name = output_filename
+
+        if not isinstance(out_name, str) or not out_name.strip():
+             out_name = "SCAIL_Final_Completo.mp4"
+
+        # Add .mp4 extension if not present
+        if not out_name.lower().endswith('.mp4'):
+            out_name += '.mp4'
 
         if not flat_paths:
-            return ("Error: No se encontraron vídeos para unir en el Batch.", )
+            return ("Error: No se encontraron vídeos .mp4 para unir.", )
 
-        if not shutil.which("ffmpeg"):
-            raise FileNotFoundError("FFmpeg is not installed or not found in system PATH. Please install FFmpeg to stitch videos.")
+        # 3. Preparar directorio de salida estándar
+        out_dir = folder_paths.get_output_directory()
+        list_file_path = os.path.join(out_dir, "batch_concat_list.txt")
 
-        # 1. Crear el archivo de lista de concatenación en el directorio de salida estándar
-        output_dir = folder_paths.get_output_directory()
-        list_file_path = os.path.join(output_dir, "batch_concat_list.txt")
-
+        # 4. Crear archivo de concatenación seguro para FFmpeg
         with open(list_file_path, 'w', encoding='utf-8') as f:
-            for video in sorted(flat_paths): # Mantener el orden de los chunks
+            for video in sorted(flat_paths):
+                # Usar rutas absolutas aseguradas
                 f.write(f"file '{os.path.abspath(video)}'\n")
 
-        # 2. Definir ruta final
-        final_output = os.path.join(output_dir, out_name)
-
-        # 3. FFmpeg en modo copia (rápido y sin recodificar)
+        # 5. Ejecutar unión sin recodificación (Copy codec)
+        final_output = os.path.join(out_dir, out_name)
         ffmpeg_cmd = [
             "ffmpeg", "-y", "-f", "concat", "-safe", "0",
             "-i", list_file_path, "-c", "copy", final_output
@@ -62,9 +85,8 @@ class FFmpegVideoStitcher:
 
         try:
             subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            print(f"[Sequential Batcher] Vídeo final ensamblado exitosamente: {final_output}")
+            print(f"[Sequential Batcher] Vídeo ensamblado exitosamente en: {final_output}")
         except subprocess.CalledProcessError as e:
-            print(f"[Sequential Batcher] Error de FFmpeg: {e.stderr.decode()}")
-            raise e
+            raise Exception(f"Error crítico de FFmpeg al unir los fragmentos: {e.stderr.decode()}")
 
         return (final_output, )
