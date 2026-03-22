@@ -1,4 +1,5 @@
 import os
+import glob
 import shutil
 import subprocess
 import folder_paths
@@ -93,14 +94,12 @@ class FFmpegVideoStitcher:
 
 @register_node
 class IncrementalVideoStitcher:
-    """Une los vídeos generados hasta el momento cada vez que termina un lote de Auto Queue."""
+    """Une los vídeos generados de forma incremental tras cada ciclo de Auto Queue."""
 
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                # Recibe el Filenames del VHS SOLO como un 'trigger' (gatillo) para
-                # obligar a ComfyUI a ejecutar este nodo DESPUÉS de guardar el fragmento.
                 "trigger": ("VHS_FILENAMES", ),
                 "video_prefix": ("STRING", {"default": "SCAIL_Fragmento_"}),
                 "output_filename": ("STRING", {"default": "Pelicula_Copia_Seguridad.mp4"}),
@@ -110,6 +109,8 @@ class IncrementalVideoStitcher:
     RETURN_TYPES = ("STRING", )
     RETURN_NAMES = ("final_video_path", )
     OUTPUT_NODE = True
+    # CRÍTICO: Debe estar activado para que no itere sobre el texto del trigger
+    INPUT_IS_LIST = True
     FUNCTION = "stitch_incremental"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
@@ -120,23 +121,23 @@ class IncrementalVideoStitcher:
 
         out_dir = folder_paths.get_output_directory()
 
-        # 1. Buscar todos los fragmentos generados hasta ahora con ese prefijo
-        search_pattern = os.path.join(out_dir, f"{video_prefix}*.mp4")
-        import glob
+        # Al usar INPUT_IS_LIST, los strings llegan envueltos en listas. Los extraemos:
+        prefix = video_prefix[0] if isinstance(video_prefix, list) else video_prefix
+        out_name = output_filename[0] if isinstance(output_filename, list) else output_filename
+
+        search_pattern = os.path.join(out_dir, f"{prefix}*.mp4")
         files = sorted(glob.glob(search_pattern))
 
         if not files:
-            print("[Sequential Batcher] No se encontraron fragmentos para unir aún.")
+            print(f"[Sequential Batcher] No se encontraron fragmentos con prefijo '{prefix}'.")
             return ("", )
 
-        # 2. Crear archivo CSV/TXT para FFmpeg
         list_file_path = os.path.join(out_dir, "batch_concat_list.txt")
         with open(list_file_path, 'w', encoding='utf-8') as f:
             for video in files:
                 f.write(f"file '{os.path.abspath(video)}'\n")
 
-        # 3. Ensamblar sobrescribiendo el archivo final
-        final_output = os.path.join(out_dir, output_filename)
+        final_output = os.path.join(out_dir, out_name)
         ffmpeg_cmd = [
             "ffmpeg", "-y", "-f", "concat", "-safe", "0",
             "-i", list_file_path, "-c", "copy", final_output
@@ -144,7 +145,7 @@ class IncrementalVideoStitcher:
 
         try:
             subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            print(f"[Sequential Batcher] Backup Incremental: {len(files)} vídeos unidos en {output_filename}")
+            print(f"[Sequential Batcher] Backup Incremental: {len(files)} vídeos unidos en {out_name}")
         except subprocess.CalledProcessError as e:
             print(f"[Sequential Batcher] Error de FFmpeg: {e.stderr.decode()}")
 
