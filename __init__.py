@@ -52,6 +52,8 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "ImageListToBatch": "🖼️ Image List To Batch",
     "LatentBatchToList": "🎞️ Latent Batch To List",
     "LatentListToBatch": "🎞️ Latent List To Batch",
+    "SessionImageReceiver": "📥 Session Image Receiver",
+    "SessionImageSender": "📤 Session Image Sender",
     
     # Video
     "FFmpegVideoStitcher": "🎞️ FFmpeg Video Stitcher",

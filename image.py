@@ -255,3 +255,73 @@ class LatentListToBatch:
 
     def go(self, latents):
         return ({"samples": torch.cat([l["samples"] for l in latents], dim=0)},)
+
+
+# Variable global para almacenar el último fotograma de la sesión
+global_session_image = None
+
+@register_node
+class SessionImageReceiver:
+    """Proporciona la imagen inicial en el ciclo 1, y la última imagen generada en los ciclos siguientes."""
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "initial_image": ("IMAGE",),
+                "reset_session": ("BOOLEAN", {"default": False}),
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("current_image",)
+    FUNCTION = "get_image"
+    CATEGORY = "🔁 Sequential Batcher/Image"
+
+    # CRÍTICO: Obliga a ComfyUI a ejecutar este nodo en cada ciclo de Auto Queue
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("NaN")
+
+    def get_image(self, initial_image, reset_session):
+        global global_session_image
+
+        # Si el usuario pide reiniciar, o es la primera vez que arranca ComfyUI
+        if reset_session or global_session_image is None:
+            global_session_image = initial_image
+            print("[Sequential Batcher] Reference Image: Iniciando sesión con la imagen original.")
+            return (initial_image, )
+
+        print("[Sequential Batcher] Reference Image: Usando el último fotograma del ciclo anterior.")
+        return (global_session_image, )
+
+@register_node
+class SessionImageSender:
+    """Extrae el último fotograma de un lote de vídeo y lo guarda en memoria para el siguiente ciclo."""
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "generated_images": ("IMAGE",),
+            },
+        }
+
+    RETURN_TYPES = ()
+    OUTPUT_NODE = True
+    FUNCTION = "set_image"
+    CATEGORY = "🔁 Sequential Batcher/Image"
+
+    # CRÍTICO: Obliga a ComfyUI a ejecutar este nodo siempre
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("NaN")
+
+    def set_image(self, generated_images):
+        global global_session_image
+
+        # En ComfyUI, los lotes de imágenes son tensores de forma [B, H, W, C]
+        # Extraemos solo el último elemento preservando la dimensión del lote [1, H, W, C] usando clone() para desligarlo del grafo actual
+        last_frame = generated_images[-1:].clone()
+        global_session_image = last_frame
+
+        print(f"[Sequential Batcher] Reference Image: Último fotograma capturado con éxito.")
+        return ()
