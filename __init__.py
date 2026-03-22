@@ -67,6 +67,8 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     # Loop
     "LoopIndex": "🔁 Sequential Loop Index",
     "Repeat": "🔁 Repeat",
+    "SequentialLoopStart": "🏁 Loop Start (Index)",
+    "SequentialLoopTrigger": "🚀 Loop Trigger (Auto-Queue)",
 })
 
 # Backward compatibility for "Job" naming
