@@ -92,6 +92,40 @@ class FFmpegVideoStitcher:
 
         return (final_output, )
 
+@register_node
+class WanFrameValidator:
+    """Valida y corrige el número de fotogramas para que encaje en la fórmula 4k+1 de Wan."""
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "target_frames": ("INT", {"default": 49, "min": 1, "max": 10000, "step": 1}),
+            },
+        }
+
+    RETURN_TYPES = ("INT",)
+    RETURN_NAMES = ("valid_frames",)
+    FUNCTION = "validate"
+    CATEGORY = "🔁 Sequential Batcher/Video"
+
+    def validate(self, target_frames):
+        # 1. Aplicamos la fórmula para redondear a la baja al 4k+1 más cercano
+        k = (target_frames - 1) // 4
+        corrected_frames = (4 * k) + 1
+
+        # 2. Límite de seguridad por si ponen 0 o negativo
+        if corrected_frames < 1:
+            corrected_frames = 1
+
+        # 3. Chivato por consola
+        if corrected_frames != target_frames:
+            print(f"🛡️ [Wan Validator] Aviso: {target_frames} no es válido para Wan. Redondeado a la baja a -> {corrected_frames}")
+        else:
+            print(f"🛡️ [Wan Validator] Fotogramas perfectos: {corrected_frames}")
+
+        return (corrected_frames, )
+
 # Variable global en memoria. Se vacía automáticamente al reiniciar ComfyUI.
 session_video_list = []
 

@@ -77,6 +77,7 @@ Los modelos de vídeo generan muchos fotogramas que pueden superar fácilmente l
 - **📤 Session Image Sender** y **📥 Session Image Receiver**: Un patrón Emisor/Receptor diseñado para enviar el *último fotograma* de un lote como el *primer fotograma* del siguiente ciclo de Auto Queue. Esto evita los errores de dependencias cíclicas en ComfyUI y permite bucles de generación de vídeo continuos e infinitos.
 
 ### 🎞️ Categoría Vídeo (`🔁 Sequential Batcher/Video`)
+- **🛡️ Wan Frame Validator**: Garantiza que el recuento de fotogramas de vídeo cumpla estrictamente con la arquitectura 4k+1 de Wan, evitando fotogramas clave omitidos o duplicados.
 - **🎞️ FFmpeg Video Stitcher**: Nodo final en un bucle de vídeo. Espera a que termine todo el lote secuencial y une los fragmentos de vídeo utilizando FFmpeg sin recodificar.
   - *Entrada*: `video_paths` (Lista de VHS_FILENAMES), `output_filename` (Cadena de texto).
   - *Salida*: `final_video_path` (Ruta del vídeo ensamblado).

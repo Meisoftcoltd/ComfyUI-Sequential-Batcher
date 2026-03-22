@@ -1,6 +1,9 @@
-import torch
+import os
+import random
 import numpy as np
+import torch
 from PIL import Image, ImageDraw, ImageFont
+import folder_paths
 
 from . import register_node
 
@@ -260,9 +263,23 @@ class LatentListToBatch:
 # Variable global para almacenar el último fotograma de la sesión
 global_session_image = None
 
+def tensor_to_temp_image(tensor_image, prefix="session_img"):
+    """Convierte un tensor de ComfyUI [1, H, W, C] a PNG temporal para la UI."""
+    temp_dir = folder_paths.get_temp_directory()
+    filename = f"{prefix}_{random.randint(10000, 99999)}.png"
+    filepath = os.path.join(temp_dir, filename)
+
+    # Extraemos el primer (y único) frame del tensor y lo convertimos
+    img_array = 255. * tensor_image[0].cpu().numpy()
+    img = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
+    img.save(filepath)
+
+    return {"filename": filename, "subfolder": "", "type": "temp"}
+
+
 @register_node
 class SessionImageReceiver:
-    """Proporciona la imagen inicial en el ciclo 1, y la última imagen generada en los ciclos siguientes."""
+    """Proporciona y MUESTRA la imagen inicial o la última generada del ciclo anterior."""
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -274,10 +291,10 @@ class SessionImageReceiver:
 
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("current_image",)
+    OUTPUT_NODE = True # Necesario para que la UI se actualice
     FUNCTION = "get_image"
     CATEGORY = "🔁 Sequential Batcher/Image"
 
-    # CRÍTICO: Obliga a ComfyUI a ejecutar este nodo en cada ciclo de Auto Queue
     @classmethod
     def IS_CHANGED(cls, **kwargs):
         return float("NaN")
@@ -285,18 +302,22 @@ class SessionImageReceiver:
     def get_image(self, initial_image, reset_session):
         global global_session_image
 
-        # Si el usuario pide reiniciar, o es la primera vez que arranca ComfyUI
         if reset_session or global_session_image is None:
             global_session_image = initial_image
-            print("[Sequential Batcher] Reference Image: Iniciando sesión con la imagen original.")
-            return (initial_image, )
+            print("[Sequential Batcher] Receiver: Iniciando sesión con la imagen original.")
+        else:
+            print("[Sequential Batcher] Receiver: Usando el último fotograma del ciclo anterior.")
 
-        print("[Sequential Batcher] Reference Image: Usando el último fotograma del ciclo anterior.")
-        return (global_session_image, )
+        # Generar vista previa para la UI
+        ui_image = tensor_to_temp_image(global_session_image, "receiver")
+
+        # Devolver el diccionario con la actualización de la UI y el resultado real
+        return {"ui": {"images": [ui_image]}, "result": (global_session_image, )}
+
 
 @register_node
 class SessionImageSender:
-    """Extrae el último fotograma de un lote de vídeo y lo guarda en memoria para el siguiente ciclo."""
+    """Extrae, guarda en memoria y MUESTRA el último fotograma de un lote de vídeo."""
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -311,7 +332,6 @@ class SessionImageSender:
     FUNCTION = "set_image"
     CATEGORY = "🔁 Sequential Batcher/Image"
 
-    # CRÍTICO: Obliga a ComfyUI a ejecutar este nodo siempre
     @classmethod
     def IS_CHANGED(cls, **kwargs):
         return float("NaN")
@@ -319,10 +339,14 @@ class SessionImageSender:
     def set_image(self, generated_images):
         global global_session_image
 
-        # En ComfyUI, los lotes de imágenes son tensores de forma [B, H, W, C]
-        # Extraemos solo el último elemento preservando la dimensión del lote [1, H, W, C] usando clone() para desligarlo del grafo actual
+        # Extraemos solo el último elemento preservando la dimensión del lote [1, H, W, C]
         last_frame = generated_images[-1:].clone()
         global_session_image = last_frame
 
-        print(f"[Sequential Batcher] Reference Image: Último fotograma capturado con éxito.")
-        return ()
+        print(f"[Sequential Batcher] Sender: Último fotograma capturado con éxito.")
+
+        # Generar vista previa para la UI
+        ui_image = tensor_to_temp_image(last_frame, "sender")
+
+        # Solo actualizamos la UI, no hay salida de cables ("result" no es necesario si RETURN_TYPES es vacío)
+        return {"ui": {"images": [ui_image]}}

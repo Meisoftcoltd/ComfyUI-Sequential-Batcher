@@ -77,6 +77,7 @@ Video models produce many frames that can easily exceed 24GB VRAM.
 - **📤 Session Image Sender** & **📥 Session Image Receiver**: A powerful Sender/Receiver pattern designed to pass the *last frame* of an image batch into the *first frame* of the next Auto Queue cycle. This avoids ComfyUI's cyclic dependency errors, allowing for infinite, continuous video generation loops.
 
 ### 🎞️ Video Category (`🔁 Sequential Batcher/Video`)
+- **🛡️ Wan Frame Validator**: Ensures video frame counts comply with Wan's strict 4k+1 architecture to prevent skipped or duplicated keyframes.
 - **🎞️ FFmpeg Video Stitcher**: Final node in a video loop. Waits for the entire sequential batch to finish and stitches the video chunks together using FFmpeg without re-encoding.
   - *Input*: `video_paths` (List of VHS_FILENAMES), `output_filename` (String).
   - *Output*: `final_video_path` (Path to the stitched video).
