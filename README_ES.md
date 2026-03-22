@@ -74,15 +74,15 @@ Los modelos de vídeo generan muchos fotogramas que pueden superar fácilmente l
 - **🎞️ Latent Batch To List**: Divide latentes de vídeo fotograma a fotograma para un procesamiento seguro en VRAM.
 - **🎞️ Latent List To Batch**: Une fotogramas individuales de nuevo en un lote latente de vídeo.
 - **⏳ Progress Bar**: Genera un indicador visual de progreso.
-- **📤 Session Image Sender** y **📥 Session Image Receiver**: Un patrón Emisor/Receptor diseñado para enviar el *último fotograma* de un lote como el *primer fotograma* del siguiente ciclo de Auto Queue. Esto evita los errores de dependencias cíclicas en ComfyUI y permite bucles de generación de vídeo continuos e infinitos.
+- **📤 Session Image Sender** y **📥 Session Image Receiver**: Un patrón Emisor/Receptor diseñado para enviar el *último fotograma* de un lote como el *primer fotograma* del siguiente ciclo de Auto Queue. Esto evita los errores de dependencias cíclicas en ComfyUI y permite bucles de generación de vídeo continuos e infinitos. El Receiver ahora acepta el `current_loop_index` y vacía automáticamente su memoria de sesión cuando el bucle vuelve a `0`.
 
 ### 🎞️ Categoría Vídeo (`🔁 Sequential Batcher/Video`)
 - **🛡️ Wan Frame Validator**: Garantiza que el recuento de fotogramas de vídeo cumpla estrictamente con la arquitectura 4k+1 de Wan, evitando fotogramas clave omitidos o duplicados.
 - **🎞️ FFmpeg Video Stitcher**: Nodo final en un bucle de vídeo. Espera a que termine todo el lote secuencial y une los fragmentos de vídeo utilizando FFmpeg sin recodificar.
   - *Entrada*: `video_paths` (Lista de VHS_FILENAMES), `output_filename` (Cadena de texto).
   - *Salida*: `final_video_path` (Ruta del vídeo ensamblado).
-- **🎞️ Incremental Auto-Stitcher**: Nodo de ensamblaje incremental diseñado específicamente para ciclos de Auto Queue. Se ejecuta inmediatamente después de que cada fragmento es guardado y extrae de manera estricta las rutas `.mp4` del JSON de salida que genera `VHS_FILENAMES`. Mantiene una lista en la memoria de la sesión activa (que se vacía automáticamente al reiniciar ComfyUI) para ensamblar *únicamente* los vídeos generados durante la sesión actual, garantizando inmunidad a archivos viejos o "basura" en el directorio de salida.
-  - *Entrada*: `trigger` (JSON/lista de VHS_FILENAMES), `output_filename` (Cadena de texto), `reset_list` (Booleano: actívalo a True en un ciclo para vaciar manualmente la memoria de la sesión y empezar un vídeo nuevo).
+- **🎞️ Incremental Auto-Stitcher**: Nodo de ensamblaje incremental diseñado específicamente para ciclos de Auto Queue. Se ejecuta inmediatamente después de que cada fragmento es guardado y extrae de manera estricta las rutas `.mp4` del JSON de salida que genera `VHS_FILENAMES`. Mantiene una lista en la memoria de la sesión activa para ensamblar *únicamente* los vídeos generados durante el ciclo de bucle actual, garantizando inmunidad a archivos viejos o "basura" en el directorio de salida.
+  - *Entrada*: `trigger` (JSON/lista de VHS_FILENAMES), `output_filename` (Cadena de texto), `current_loop_index` (Entero: conéctalo al índice del bucle para vaciar automáticamente la memoria de la sesión en el primer ciclo).
   - *Salida*: `final_video_path` (Ruta del vídeo ensamblado incremental).
 
 ---

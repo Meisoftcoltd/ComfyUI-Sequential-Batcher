@@ -279,19 +279,19 @@ def tensor_to_temp_image(tensor_image, prefix="session_img"):
 
 @register_node
 class SessionImageReceiver:
-    """Proporciona y MUESTRA la imagen inicial o la última generada del ciclo anterior."""
+    """Proporciona la imagen inicial o la última generada, detectando el inicio automáticamente."""
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
                 "initial_image": ("IMAGE",),
-                "reset_session": ("BOOLEAN", {"default": False}),
+                "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000, "step": 1}),
             },
         }
 
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("current_image",)
-    OUTPUT_NODE = True # Necesario para que la UI se actualice
+    OUTPUT_NODE = True
     FUNCTION = "get_image"
     CATEGORY = "🔁 Sequential Batcher/Image"
 
@@ -299,19 +299,22 @@ class SessionImageReceiver:
     def IS_CHANGED(cls, **kwargs):
         return float("NaN")
 
-    def get_image(self, initial_image, reset_session):
+    def get_image(self, initial_image, current_loop_index):
         global global_session_image
 
-        if reset_session or global_session_image is None:
+        # Extracción segura por si en el futuro se usa INPUT_IS_LIST
+        loop_idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
+
+        # LÓGICA NATIVA: Si es el primer ciclo (index 0), reiniciamos
+        is_first_cycle = (loop_idx == 0)
+
+        if is_first_cycle or global_session_image is None:
             global_session_image = initial_image
-            print("[Sequential Batcher] Receiver: Iniciando sesión con la imagen original.")
+            print(f"[Sequential Batcher] Receiver: Ciclo {loop_idx}. Iniciando sesión con la imagen original.")
         else:
-            print("[Sequential Batcher] Receiver: Usando el último fotograma del ciclo anterior.")
+            print(f"[Sequential Batcher] Receiver: Ciclo {loop_idx}. Usando el último fotograma del ciclo anterior.")
 
-        # Generar vista previa para la UI
         ui_image = tensor_to_temp_image(global_session_image, "receiver")
-
-        # Devolver el diccionario con la actualización de la UI y el resultado real
         return {"ui": {"images": [ui_image]}, "result": (global_session_image, )}
 
 
