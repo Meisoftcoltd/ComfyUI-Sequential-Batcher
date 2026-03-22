@@ -92,61 +92,97 @@ class FFmpegVideoStitcher:
 
         return (final_output, )
 
+# Variable global en memoria. Se vacía automáticamente al reiniciar ComfyUI.
+session_video_list = []
+
 @register_node
 class IncrementalVideoStitcher:
-    """Une los vídeos generados de forma incremental tras cada ciclo de Auto Queue."""
+    """Une los vídeos de la sesión actual extrayéndolos estrictamente del JSON del VHS."""
 
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
+                # Recibe la lista/JSON de VHS_VideoCombine
                 "trigger": ("VHS_FILENAMES", ),
-                "video_prefix": ("STRING", {"default": "SCAIL_Fragmento_"}),
-                "output_filename": ("STRING", {"default": "Pelicula_Copia_Seguridad.mp4"}),
+                "output_filename": ("STRING", {"default": "Pelicula_Final_Sesion.mp4"}),
+                "reset_list": ("BOOLEAN", {"default": False}),
             },
         }
 
     RETURN_TYPES = ("STRING", )
     RETURN_NAMES = ("final_video_path", )
     OUTPUT_NODE = True
-    # CRÍTICO: Debe estar activado para que no itere sobre el texto del trigger
     INPUT_IS_LIST = True
     FUNCTION = "stitch_incremental"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
-    def stitch_incremental(self, trigger, video_prefix, output_filename):
+    def stitch_incremental(self, trigger, output_filename, reset_list):
+        global session_video_list
+
+        # Extraer variables si llegan en lista por INPUT_IS_LIST=True
+        do_reset = reset_list[0] if isinstance(reset_list, list) else reset_list
+
+        if do_reset:
+            session_video_list.clear()
+            print("[Sequential Batcher] Memoria de sesión vaciada (reset_list=True).")
+
         if not shutil.which("ffmpeg"):
-            print("[Sequential Batcher] Error: FFmpeg no está instalado.")
+            print("[Sequential Batcher] Error: FFmpeg no está instalado en el sistema.")
             return ("", )
 
         out_dir = folder_paths.get_output_directory()
-
-        # Al usar INPUT_IS_LIST, los strings llegan envueltos en listas. Los extraemos:
-        prefix = video_prefix[0] if isinstance(video_prefix, list) else video_prefix
         out_name = output_filename[0] if isinstance(output_filename, list) else output_filename
 
-        search_pattern = os.path.join(out_dir, f"{prefix}*.mp4")
-        files = sorted(glob.glob(search_pattern))
+        # 1. Extracción recursiva: buscar cualquier archivo .mp4 dentro del JSON/lista recibido
+        current_mp4s = []
+        def extract_mp4s(data):
+            if isinstance(data, str) and data.endswith(".mp4"):
+                current_mp4s.append(data)
+            elif isinstance(data, list) or isinstance(data, tuple):
+                for item in data:
+                    extract_mp4s(item)
+            elif isinstance(data, dict):
+                for item in data.values():
+                    extract_mp4s(item)
 
-        if not files:
-            print(f"[Sequential Batcher] No se encontraron fragmentos con prefijo '{prefix}'.")
+        extract_mp4s(trigger)
+
+        # 2. Añadir los vídeos detectados a la memoria de la sesión (evitando duplicados)
+        for video_path in current_mp4s:
+            # Asegurar ruta absoluta dentro del directorio de salida si es relativa
+            if not os.path.isabs(video_path):
+                abs_video_path = os.path.join(out_dir, video_path)
+            else:
+                abs_video_path = video_path
+
+            # Evitamos añadir el propio archivo de salida a la lista si se cuela, y comprobamos existencia
+            if not abs_video_path.endswith(out_name) and abs_video_path not in session_video_list and os.path.exists(abs_video_path):
+                session_video_list.append(abs_video_path)
+
+        if not session_video_list:
+            print("[Sequential Batcher] El JSON de entrada no contenía vídeos nuevos para unir, o la lista está vacía.")
             return ("", )
 
-        list_file_path = os.path.join(out_dir, "batch_concat_list.txt")
-        with open(list_file_path, 'w', encoding='utf-8') as f:
-            for video in files:
-                f.write(f"file '{os.path.abspath(video)}'\n")
-
-        final_output = os.path.join(out_dir, out_name)
-        ffmpeg_cmd = [
-            "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-            "-i", list_file_path, "-c", "copy", final_output
-        ]
-
+        # 3. Crear el listado para FFmpeg usando ESTRICTAMENTE la memoria de sesión
+        list_file_path = os.path.join(out_dir, "batch_concat_exact_list.txt")
         try:
+            with open(list_file_path, 'w', encoding='utf-8') as f:
+                for video in session_video_list:
+                    f.write(f"file '{video}'\n")
+
+            final_output = os.path.join(out_dir, out_name)
+            ffmpeg_cmd = [
+                "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                "-i", list_file_path, "-c", "copy", final_output
+            ]
+
             subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            print(f"[Sequential Batcher] Backup Incremental: {len(files)} vídeos unidos en {out_name}")
+            print(f"[Sequential Batcher] Ensamblaje Exacto: {len(session_video_list)} vídeos unidos de la sesión actual.")
         except subprocess.CalledProcessError as e:
             print(f"[Sequential Batcher] Error de FFmpeg: {e.stderr.decode()}")
+        finally:
+            if os.path.exists(list_file_path):
+                os.remove(list_file_path)
 
         return (final_output, )
