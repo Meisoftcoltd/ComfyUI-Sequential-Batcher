@@ -140,7 +140,7 @@ class IncrementalVideoStitcher:
                 # Recibe la lista/JSON de VHS_VideoCombine
                 "trigger": ("VHS_FILENAMES", ),
                 "output_filename": ("STRING", {"default": "Pelicula_Final_Sesion.mp4"}),
-                "reset_list": ("BOOLEAN", {"default": False}),
+                "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000, "step": 1}),
             },
         }
 
@@ -151,22 +151,25 @@ class IncrementalVideoStitcher:
     FUNCTION = "stitch_incremental"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
-    def stitch_incremental(self, trigger, output_filename, reset_list):
+    def stitch_incremental(self, trigger, output_filename, current_loop_index):
         global session_video_list
 
-        # Extraer variables si llegan en lista por INPUT_IS_LIST=True
-        do_reset = reset_list[0] if isinstance(reset_list, list) else reset_list
-
-        if do_reset:
-            session_video_list.clear()
-            print("[Sequential Batcher] Memoria de sesión vaciada (reset_list=True).")
-
         if not shutil.which("ffmpeg"):
-            print("[Sequential Batcher] Error: FFmpeg no está instalado en el sistema.")
+            print("[Sequential Batcher] Error de FFmpeg: No está instalado.")
             return ("", )
 
         out_dir = folder_paths.get_output_directory()
         out_name = output_filename[0] if isinstance(output_filename, list) else output_filename
+
+        # Extracción segura obligatoria por INPUT_IS_LIST = True
+        loop_idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
+
+        # LÓGICA NATIVA: Si es el primer ciclo, vaciamos la lista
+        is_first_cycle = (loop_idx == 0)
+
+        if is_first_cycle:
+            print(f"[Sequential Batcher] Auto-Stitcher: Ciclo {loop_idx}. Vaciando memoria de la sesión.")
+            session_video_list.clear()
 
         # 1. Extracción recursiva: buscar cualquier archivo .mp4 dentro del JSON/lista recibido
         current_mp4s = []
