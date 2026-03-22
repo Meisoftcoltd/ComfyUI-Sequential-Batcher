@@ -74,6 +74,7 @@ Video models produce many frames that can easily exceed 24GB VRAM.
 - **🎞️ Latent Batch To List**: Splits video latents frame-by-frame for VRAM-safe processing.
 - **🎞️ Latent List To Batch**: Merges individual frames back into a video latent batch.
 - **⏳ Progress Bar**: Generates a visual progress indicator.
+- **📤 Session Image Sender** & **📥 Session Image Receiver**: A powerful Sender/Receiver pattern designed to pass the *last frame* of an image batch into the *first frame* of the next Auto Queue cycle. This avoids ComfyUI's cyclic dependency errors, allowing for infinite, continuous video generation loops.
 
 ### 🎞️ Video Category (`🔁 Sequential Batcher/Video`)
 - **🎞️ FFmpeg Video Stitcher**: Final node in a video loop. Waits for the entire sequential batch to finish and stitches the video chunks together using FFmpeg without re-encoding.

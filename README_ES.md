@@ -74,6 +74,7 @@ Los modelos de vídeo generan muchos fotogramas que pueden superar fácilmente l
 - **🎞️ Latent Batch To List**: Divide latentes de vídeo fotograma a fotograma para un procesamiento seguro en VRAM.
 - **🎞️ Latent List To Batch**: Une fotogramas individuales de nuevo en un lote latente de vídeo.
 - **⏳ Progress Bar**: Genera un indicador visual de progreso.
+- **📤 Session Image Sender** y **📥 Session Image Receiver**: Un patrón Emisor/Receptor diseñado para enviar el *último fotograma* de un lote como el *primer fotograma* del siguiente ciclo de Auto Queue. Esto evita los errores de dependencias cíclicas en ComfyUI y permite bucles de generación de vídeo continuos e infinitos.
 
 ### 🎞️ Categoría Vídeo (`🔁 Sequential Batcher/Video`)
 - **🎞️ FFmpeg Video Stitcher**: Nodo final en un bucle de vídeo. Espera a que termine todo el lote secuencial y une los fragmentos de vídeo utilizando FFmpeg sin recodificar.
