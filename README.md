@@ -1,106 +1,43 @@
-# 🔁 ComfyUI Sequential Batcher & Video Loop Master (Beta v0.9.3)
+# ComfyUI Sequential Batcher (v1.0.0)
 
-> [!IMPORTANT]
-> This version is currently in **BETA**. We have fully transitioned the terminology from "Job" to **Batch** to align with ComfyUI standards and the project name.
+A highly specialized suite of custom nodes for ComfyUI designed for **Recursive Self-Queuing** and autonomous sequential processing. This architecture minimizes VRAM usage by processing heavy tasks (like video generation) sequentially, batch-by-batch, orchestrated entirely from within the graph.
 
-The ultimate tool for creating complex iterative workflows and frame-by-frame video processing in ComfyUI. Designed to handle huge tasks (like high-res video generation with Wan2.2 or LTX Video) without crashing your GPU by using intelligent sequential looping instead of VRAM-heavy batching.
+> **Read in Spanish:** [README_ES.md](README_ES.md)
 
-## 🚀 Why use this?
+## The "Formula 1" Engine Architecture
 
-Standard ComfyUI batching processes everything at once (4D tensors). For video or large batches, this leads to **Out of Memory (OOM)** errors. 
-**Sequential Batcher** allows you to "split" these tasks and process them **one-by-one** (sequentially) within a single "Queue Prompt" run, then "gather" the results back into a single batch or video file.
+Starting with v1.0.0, this repository has pivoted exclusively to the autonomous sequential loops and global memory architecture. All legacy technical debt (deprecated batch/sequence/debug nodes) has been pruned, leaving a clean, highly maintainable codebase focused on 6 core nodes.
 
----
+## The 6 Core Nodes
 
-## 🛠️ Installation
+The system is built around three major categories:
 
-1. Clone this repo into `custom_nodes/comfyui-sequential-batcher`.
-2. Restart ComfyUI. 
-3. Dependencies (`torch`, `numpy`) will be handled automatically if using ComfyUI Manager.
+### 🔁 Loop (Autonomous Orchestration)
+1. **🏁 Loop Start (Index) (`SequentialLoopStart`)**: Initiates the loop, manages the global loop index, and provides the current iteration index to downstream nodes.
+2. **🚀 Loop Trigger (Auto-Queue) (`SequentialLoopTrigger`)**: Placed at the very end of your workflow. It increments the loop counter and autonomously triggers an HTTP POST request to the ComfyUI API (`/prompt`) to queue the next batch cycle.
 
----
+### 🖼️ Image (Session Memory)
+3. **📥 Session Image Receiver (`SessionImageReceiver`)**: Retrieves the initial image or the last generated frame from the previous cycle, intelligently detecting the start of a session.
+4. **📤 Session Image Sender (`SessionImageSender`)**: Extracts, saves to global memory, and displays the last frame of a video batch for the next cycle to use.
 
-## 📖 Key Concepts
+### 🎞️ Video (Assembly and Validation)
+5. **🛡️ Wan Frame Validator (`WanFrameValidator`)**: Validates and corrects the target number of frames to ensure they fit the `4k+1` formula required by specific models (e.g., Wan).
+6. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Assembles the generated video chunks of the current session sequentially using FFmpeg, parsing outputs natively from the `VHS_FILENAMES` format.
 
-- **SEQUENCE**: A simple list of values (numbers, strings, etc.).
-- **BATCH**: A structured collection of "steps". Each step has named **Attributes**.
-- **Iteration**: The magic happens in nodes like `Batch To List`, `Image Batch To List`, or `Latent Batch To List`. When ComfyUI sees a "List" output from these nodes, it executes all downstream nodes once for each item in that list.
+## Setup & Usage
 
----
+### Prerequisites
+- **FFmpeg**: Must be installed and available in your system's PATH for the `Incremental Auto-Stitcher` to function correctly.
 
-## 🎞️ Video Workflow (Wan2.2 / LTX-Video / Future Models)
+### Installation
+1. Navigate to your ComfyUI `custom_nodes` folder.
+2. Clone this repository: `git clone https://github.com/your-repo/ComfyUI-Sequential-Batcher.git`
+3. Restart ComfyUI.
 
-Video models produce many frames that can easily exceed 24GB VRAM.
-1. **Split**: Use `Latent Batch To List` to turn your video latent into a list of single frames.
-2. **Process**: Connect to your KSampler/VAE Decoder. ComfyUI will process Frame 1, then Frame 2, then Frame 3...
-3. **Gather**: Use `Latent List To Batch` (or `Image List To Batch` if you decoded first) to reconstruct the full video batch for saving.
-4. **Stitch (VHS Combine)**: To stitch heavy video chunks sequentially:
-   - *Option A (Math)*: `Range` -> `MakeBatch` (attribute: "skip_frames") -> `BatchToList` -> `GetAttributeInt` (name: "skip_frames") connected to `VHS_LoadVideo`.
-   - *Option B (CSV)*: `LoadCSV` (with a `skip_frames` column) -> `BatchToList` -> `GetAttributeInt`.
-   - Connect the output of `VHS_VideoCombine` (specifically the `VHS_FILENAMES` output) to the **FFmpeg Video Stitcher** node (`video_paths`). The Stitcher will wait for all chunks to finish and combine them automatically!
-
-> [!WARNING]
-> **OOM Prevention (Memory Warning):** While `BatchToList` solves the data passing issue, you must still manage PyTorch VRAM. It is highly recommended to use the **easy cleanGpuUsed** node (or similar VRAM clearing nodes) after the VAE Decoder in each cycle of the Batch. Without manual VRAM clearing in each iteration, the sequential loop will accumulate garbage in your graphics card and eventually cause an Out of Memory error.
+### How to use the Autonomous Machine
+1. **The Start:** Add the `🏁 Loop Start (Index)` node. Connect its `current_loop_index` to the index inputs of your receiver and stitcher nodes. Ensure `reset_loop` is set to `False`.
+2. **The End:** Add the `🚀 Loop Trigger (Auto-Queue)` node. Crucially, connect the text output (`final_video_path`) from your `Incremental Auto-Stitcher` to the `trigger_dependency` input. This forces the trigger to wait until the video is physically saved. Set your desired `target_loops`.
+3. **Execution:** You no longer need to check "Auto Queue". Just press "Queue Prompt" **once**. The workflow will run the first batch, and upon finishing, the trigger will invisibly signal the server to queue the next batch until the target is reached, at which point it stitches everything together and finishes.
 
 ---
-
-## 🔢 Detailed Node Reference
-
-### 🔄 Loop Category (`🔁 Sequential Batcher/Loop`)
-- **🔁 Sequential Loop Index**: The simplest way to start a loop.
-  - *Input*: `count` (How many times to run).
-  - *Output*: `index` (0, 1, 2...). Useful for seeding or selecting specific items.
-- **🔁 Repeat**: Takes any input and repeats it N times.
-  - *Input*: `input` (Any), `count` (INT).
-  - *Output*: `output` (List of the same input).
-
-### 🛠️ Batch Category (`🔁 Sequential Batcher/Batch`)
-- **📂 Load CSV**: Loads a CSV file as a Batch. Now includes a table preview in the workflow.
-  - *Input*: `path` (File location), `delimiter`, `quotechar`.
-  - *Optional Input*: `index` (To pick a specific row).
-  - *Output*: `batch` (The full list), `current_attributes` (Dict of the selected row), `count` (Total rows).
-- **📊 Preview Batch**: Displays a table of the batch content in the workflow.
-  - *Input*: `batch`, `index` (Highlight specific row), `max_rows`.
-- **🛠️ Make Batch**: Turns a sequence into a "Batch" object.
-  - *Input*: `sequence` (The data), `name` (The attribute name, e.g., "cfg_scale").
-- **🖇️ Combine Batches**: Merges multiple batches.
-  - *Modes*: `zip` (paired) or `product` (every combination).
-- **🔄 Batch To List**: **CRITICAL**. Converts a Batch into a stream of attributes that triggers the sequential loop.
-- **📥 Get Attribute**: Extracts a specific value from the current batch step by its name.
-
-### 🖼️ Image & Latent Category (`🔁 Sequential Batcher/Image` & `/Latent`)
-- **🖼️ Image Batch To List**: Splits a [N,H,W,C] tensor into N separate images.
-- **🖼️ Image List To Batch**: Reconstructs a batch from iterated images.
-- **🎞️ Latent Batch To List**: Splits video latents frame-by-frame for VRAM-safe processing.
-- **🎞️ Latent List To Batch**: Merges individual frames back into a video latent batch.
-- **⏳ Progress Bar**: Generates a visual progress indicator.
-- **📤 Session Image Sender** & **📥 Session Image Receiver**: A powerful Sender/Receiver pattern designed to pass the *last frame* of an image batch into the *first frame* of the next Auto Queue cycle. This avoids ComfyUI's cyclic dependency errors, allowing for infinite, continuous video generation loops. The Receiver now accepts the `current_loop_index` and automatically clears its session memory when the loop resets to `0`.
-
-### 🎞️ Video Category (`🔁 Sequential Batcher/Video`)
-- **🛡️ Wan Frame Validator**: Ensures video frame counts comply with Wan's strict 4k+1 architecture to prevent skipped or duplicated keyframes.
-- **🎞️ FFmpeg Video Stitcher**: Final node in a video loop. Waits for the entire sequential batch to finish and stitches the video chunks together using FFmpeg without re-encoding.
-  - *Input*: `video_paths` (List of VHS_FILENAMES), `output_filename` (String).
-  - *Output*: `final_video_path` (Path to the stitched video).
-- **🎞️ Incremental Auto-Stitcher**: Incremental stitching node designed specifically for Auto Queue cycles. It runs immediately after each chunk is saved and extracts the `.mp4` absolute paths strictly from the `VHS_FILENAMES` output JSON. It maintains an active session memory to stitch *only* the videos generated during the current loop cycle, guaranteeing immunity to old/garbage files in the output directory.
-  - *Input*: `trigger` (VHS_FILENAMES list/JSON), `output_filename` (String), `current_loop_index` (Integer: connects to the loop index to automatically flush the session memory on the first cycle).
-  - *Output*: `final_video_path` (Path to the incrementally stitched final video).
-
----
-
-## 💡 Pro Tips & Use Cases
-
-### 📝 Using CSV for Prompts and Scenes
-You can create a CSV with columns like `prompt`, `negative_prompt`, and `seed`.
-1. Use **📂 Load CSV** to load your file.
-2. Connect `batch` to **🔄 Batch To List**.
-3. Use **📥 Get Attribute** to pull the `prompt` into your CLIP Text Encode.
-4. Each row in your CSV will be processed as one "frame" or "job" in the sequence.
-
-### 🎬 Scene Timings for Video
-If you have a CSV with `frame_start` and `prompt`, you can use it to change prompts at specific points in a video generation loop.
-
-### 🧪 XY Plots
-Use **🖇️ Combine Batches** in `product` mode to create XY Plots (e.g., test every Prompt against every CFG scale).
-
-### 🔍 Automatic Model Iteration
-Use **🔍 Model Finder** to automatically iterate through a folder of LoRAs or Checkpoints.
+*Created to push the boundaries of ComfyUI automation.*
