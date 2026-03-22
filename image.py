@@ -306,6 +306,7 @@ class SessionImageSender:
         }
 
     RETURN_TYPES = ()
+    RETURN_NAMES = ()
     OUTPUT_NODE = True
     FUNCTION = "set_image"
     CATEGORY = "🔁 Sequential Batcher/Image"
