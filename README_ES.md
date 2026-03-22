@@ -79,9 +79,9 @@ Los modelos de vídeo generan muchos fotogramas que pueden superar fácilmente l
 - **🎞️ FFmpeg Video Stitcher**: Nodo final en un bucle de vídeo. Espera a que termine todo el lote secuencial y une los fragmentos de vídeo utilizando FFmpeg sin recodificar.
   - *Entrada*: `video_paths` (Lista de VHS_FILENAMES), `output_filename` (Cadena de texto).
   - *Salida*: `final_video_path` (Ruta del vídeo ensamblado).
-- **🎞️ Incremental Auto-Stitcher**: Nodo de ensamblaje incremental diseñado específicamente para ciclos de Auto Queue. Se ejecuta inmediatamente después de que cada fragmento es guardado (usando la señal de `VHS_FILENAMES`) y une continuamente todos los fragmentos disponibles que coincidan con un prefijo dado.
-  - *Entrada*: `trigger` (VHS_FILENAMES, actúa solo como una señal de aviso), `video_prefix` (Cadena de texto), `output_filename` (Cadena de texto).
-  - *Salida*: `final_video_path` (Ruta del vídeo de copia de seguridad unido incrementalmente).
+- **🎞️ Incremental Auto-Stitcher**: Nodo de ensamblaje incremental diseñado específicamente para ciclos de Auto Queue. Se ejecuta inmediatamente después de que cada fragmento es guardado y extrae de manera estricta las rutas `.mp4` del JSON de salida que genera `VHS_FILENAMES`. Mantiene una lista en la memoria de la sesión activa (que se vacía automáticamente al reiniciar ComfyUI) para ensamblar *únicamente* los vídeos generados durante la sesión actual, garantizando inmunidad a archivos viejos o "basura" en el directorio de salida.
+  - *Entrada*: `trigger` (JSON/lista de VHS_FILENAMES), `output_filename` (Cadena de texto), `reset_list` (Booleano: actívalo a True en un ciclo para vaciar manualmente la memoria de la sesión y empezar un vídeo nuevo).
+  - *Salida*: `final_video_path` (Ruta del vídeo ensamblado incremental).
 
 ---
 

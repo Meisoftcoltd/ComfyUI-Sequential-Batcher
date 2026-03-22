@@ -79,9 +79,9 @@ Video models produce many frames that can easily exceed 24GB VRAM.
 - **🎞️ FFmpeg Video Stitcher**: Final node in a video loop. Waits for the entire sequential batch to finish and stitches the video chunks together using FFmpeg without re-encoding.
   - *Input*: `video_paths` (List of VHS_FILENAMES), `output_filename` (String).
   - *Output*: `final_video_path` (Path to the stitched video).
-- **🎞️ Incremental Auto-Stitcher**: Incremental stitching node designed specifically for Auto Queue cycles. It runs immediately after each chunk is saved (triggered by `VHS_FILENAMES`) and continuously merges all available chunks matching a given prefix.
-  - *Input*: `trigger` (VHS_FILENAMES, acts merely as a signal), `video_prefix` (String), `output_filename` (String).
-  - *Output*: `final_video_path` (Path to the incrementally stitched backup video).
+- **🎞️ Incremental Auto-Stitcher**: Incremental stitching node designed specifically for Auto Queue cycles. It runs immediately after each chunk is saved and extracts the `.mp4` absolute paths strictly from the `VHS_FILENAMES` output JSON. It maintains an active session memory (which clears on ComfyUI restart) to stitch *only* the videos generated during the current session, guaranteeing immunity to old/garbage files in the output directory.
+  - *Input*: `trigger` (VHS_FILENAMES list/JSON), `output_filename` (String), `reset_list` (Boolean: toggle True once to manually flush the session memory and start a fresh video).
+  - *Output*: `final_video_path` (Path to the incrementally stitched final video).
 
 ---
 
