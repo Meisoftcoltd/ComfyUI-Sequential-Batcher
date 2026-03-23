@@ -1,3 +1,4 @@
+import time
 import urllib.request
 import json
 from . import register_node
@@ -23,7 +24,7 @@ class SequentialLoopStart:
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
-        return float("NaN") # Forzamos ejecución siempre
+        return time.time() # Garantiza 100% una ruptura de caché
 
     def get_index(self, reset_loop):
         global global_loop_index
@@ -68,7 +69,7 @@ class SequentialLoopTrigger:
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
-        return float("NaN")
+        return time.time() # Garantiza 100% una ruptura de caché
 
     def trigger_next(self, trigger_dependency, target_loops, port, prompt=None, extra_pnginfo=None):
         global global_loop_index

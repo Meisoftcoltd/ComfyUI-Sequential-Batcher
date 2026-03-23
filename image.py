@@ -1,4 +1,5 @@
 import os
+import time
 import random
 import numpy as np
 import torch
@@ -43,7 +44,7 @@ class SessionImageReceiver:
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
-        return float("NaN")
+        return time.time() # Garantiza 100% una ruptura de caché
 
     def get_image(self, initial_image, current_loop_index):
         global global_session_image
@@ -84,7 +85,7 @@ class SessionImageSender:
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
-        return float("NaN")
+        return time.time() # Garantiza 100% una ruptura de caché
 
     def set_image(self, generated_images):
         global global_session_image
