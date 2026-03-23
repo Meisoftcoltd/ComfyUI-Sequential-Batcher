@@ -1,43 +1,43 @@
-# ComfyUI Sequential Batcher (v1.0.0)
+# ComfyUI Sequential Batcher (v1.0.1)
 
-A highly specialized suite of custom nodes for ComfyUI designed for **Recursive Self-Queuing** and autonomous sequential processing. This architecture minimizes VRAM usage by processing heavy tasks (like video generation) sequentially, batch-by-batch, orchestrated entirely from within the graph.
+Una suite altamente especializada de nodos personalizados para ComfyUI diseñada para el **Auto-Encolado Recursivo (Recursive Self-Queuing)** y el procesamiento secuencial autónomo. Esta arquitectura minimiza el uso de VRAM procesando tareas pesadas (como la generación de vídeo) de forma secuencial, lote por lote, orquestadas completamente desde dentro del propio grafo.
 
-> **Read in Spanish:** [README_ES.md](README_ES.md)
+> **Read in English:** [README_EN.md](README_EN.md)
 
-## The "Formula 1" Engine Architecture
+## La Arquitectura "Motor de Fórmula 1"
 
-Starting with v1.0.0, this repository has pivoted exclusively to the autonomous sequential loops and global memory architecture. All legacy technical debt (deprecated batch/sequence/debug nodes) has been pruned, leaving a clean, highly maintainable codebase focused on 6 core nodes.
+A partir de la versión 1.0.0, este repositorio ha pivotado exclusivamente hacia la arquitectura de bucles secuenciales autónomos y memoria global. Toda la deuda técnica de los antiguos nodos (lotes, secuencias, depuración) ha sido eliminada, dejando un código base limpio y fácil de mantener enfocado en los 6 fantásticos.
 
-## The 6 Core Nodes
+## Los 6 Nodos Principales
 
-The system is built around three major categories:
+El sistema se construye alrededor de tres categorías principales:
 
-### 🔁 Loop (Autonomous Orchestration)
-1. **🏁 Loop Start (Index) (`SequentialLoopStart`)**: Initiates the loop, manages the global loop index, and provides the current iteration index to downstream nodes.
-2. **🚀 Loop Trigger (Auto-Queue) (`SequentialLoopTrigger`)**: Placed at the very end of your workflow. It increments the loop counter and autonomously triggers an HTTP POST request to the ComfyUI API (`/prompt`) to queue the next batch cycle.
+### 🔁 Loop (Orquestación Autónoma)
+1. **🏁 Loop Start (Index) (`SequentialLoopStart`)**: Inicia el bucle, gestiona el índice global y provee el índice actual a los nodos de imagen y vídeo del flujo.
+2. **🚀 Loop Trigger (Auto-Queue) (`SequentialLoopTrigger`)**: Se coloca al final del flujo de trabajo. Incrementa el contador y auto-encola el siguiente ciclo mediante un POST a la propia API de ComfyUI (`/prompt`). **¡Nuevo en v1.0.1!** Incorpora un **Mutador de Semillas (Seed Mutator)** que escanea el lienzo antes de cada ciclo, localiza cualquier nodo con una semilla (`seed` o `noise_seed`), y le inyecta una nueva semilla aleatoria de 32 bits (0xffffffff). Esto rompe la agresiva caché de ComfyUI y garantiza que los samplers generen un fotograma nuevo en cada bucle.
 
-### 🖼️ Image (Session Memory)
-3. **📥 Session Image Receiver (`SessionImageReceiver`)**: Retrieves the initial image or the last generated frame from the previous cycle, intelligently detecting the start of a session.
-4. **📤 Session Image Sender (`SessionImageSender`)**: Extracts, saves to global memory, and displays the last frame of a video batch for the next cycle to use.
+### 🖼️ Image (Memoria de Sesión)
+3. **📥 Session Image Receiver (`SessionImageReceiver`)**: Proporciona la imagen inicial o la última generada del ciclo anterior, detectando inteligentemente el inicio de una sesión.
+4. **📤 Session Image Sender (`SessionImageSender`)**: Extrae, guarda en la memoria global y muestra en la interfaz el último fotograma de un lote de vídeo, para que el receptor del siguiente ciclo lo utilice.
 
-### 🎞️ Video (Assembly and Validation)
-5. **🛡️ Wan Frame Validator (`WanFrameValidator`)**: Validates and corrects the target number of frames to ensure they fit the `4k+1` formula required by specific models (e.g., Wan).
-6. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Assembles the generated video chunks of the current session sequentially using FFmpeg, parsing outputs natively from the `VHS_FILENAMES` format.
+### 🎞️ Video (Ensamblaje y Validación)
+5. **🛡️ Wan Frame Validator (`WanFrameValidator`)**: Valida y corrige el número objetivo de fotogramas para asegurar que encajen en la fórmula `4k+1` requerida por modelos específicos (ej. Wan).
+6. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Ensambla secuencialmente los fragmentos de vídeo generados en la sesión actual utilizando FFmpeg, leyendo directamente las rutas desde las entradas nativas `VHS_FILENAMES`.
 
-## Setup & Usage
+## Configuración y Uso
 
-### Prerequisites
-- **FFmpeg**: Must be installed and available in your system's PATH for the `Incremental Auto-Stitcher` to function correctly.
+### Prerrequisitos
+- **FFmpeg**: Debe estar instalado y disponible en el PATH del sistema para que el `Incremental Auto-Stitcher` funcione correctamente.
 
-### Installation
-1. Navigate to your ComfyUI `custom_nodes` folder.
-2. Clone this repository: `git clone https://github.com/your-repo/ComfyUI-Sequential-Batcher.git`
-3. Restart ComfyUI.
+### Instalación
+1. Ve a la carpeta `custom_nodes` de ComfyUI.
+2. Clona este repositorio: `git clone https://github.com/your-repo/ComfyUI-Sequential-Batcher.git`
+3. Reinicia ComfyUI.
 
-### How to use the Autonomous Machine
-1. **The Start:** Add the `🏁 Loop Start (Index)` node. Connect its `current_loop_index` to the index inputs of your receiver and stitcher nodes. Ensure `reset_loop` is set to `False`.
-2. **The End:** Add the `🚀 Loop Trigger (Auto-Queue)` node. Crucially, connect the text output (`final_video_path`) from your `Incremental Auto-Stitcher` to the `trigger_dependency` input. This forces the trigger to wait until the video is physically saved. Set your desired `target_loops`.
-3. **Execution:** You no longer need to check "Auto Queue". Just press "Queue Prompt" **once**. The workflow will run the first batch, and upon finishing, the trigger will invisibly signal the server to queue the next batch until the target is reached, at which point it stitches everything together and finishes.
+### Cómo Conectar tu Nueva Máquina Autónoma
+1. **El Inicio:** Añade el nodo `🏁 Loop Start (Index)`. Conecta su salida `current_loop_index` a las entradas de índice de tu `SessionImageReceiver` y tu `Incremental Auto-Stitcher`. Asegúrate de que su interruptor `reset_loop` está en `False`.
+2. **El Final:** Añade el nodo `🚀 Loop Trigger (Auto-Queue)`. Crucial: Conecta la salida de texto (`final_video_path`) de tu `Incremental Auto-Stitcher` en la entrada `trigger_dependency`. Esto obliga al trigger a esperar a que el vídeo se haya guardado físicamente antes de disparar. Configura la cantidad de lotes que quieres en `target_loops`.
+3. **Ejecución:** **Ya no tienes que marcar la casilla "Auto Queue" nunca más.** Pulsa "Queue Prompt" **1 sola vez**. El lote 0 arranca y, al llegar al final, el nodo `Trigger` envía una señal invisible al servidor. Gracias al Mutador de Semillas, la caché se rompe en cada iteración asegurando un renderizado continuo. Verás que en el menú de ComfyUI aparece mágicamente el lote pendiente 1. Arranca el lote 1, lee la memoria perfecta y repite el proceso hasta llegar al target, ensambla el vídeo y se apaga automáticamente.
 
 ---
-*Created to push the boundaries of ComfyUI automation.*
+*Creado para llevar los límites de la automatización en ComfyUI un paso más allá.*
