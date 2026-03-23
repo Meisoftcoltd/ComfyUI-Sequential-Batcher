@@ -2,6 +2,7 @@ import os
 import glob
 import shutil
 import subprocess
+import torchaudio
 import folder_paths
 from . import register_node
 
@@ -52,6 +53,9 @@ class IncrementalVideoStitcher:
                 "output_prefix": ("STRING", {"default": "SCAIL_Final"}),
                 "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000}),
             },
+            "optional": {
+                "audio": ("AUDIO", ), # Nueva entrada de audio opcional
+            }
         }
 
     RETURN_TYPES = ("STRING", )
@@ -61,7 +65,7 @@ class IncrementalVideoStitcher:
     FUNCTION = "stitch_incremental"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
-    def stitch_incremental(self, trigger, output_prefix, current_loop_index):
+    def stitch_incremental(self, trigger, output_prefix, current_loop_index, audio=None):
         global session_video_list
 
         out_dir = folder_paths.get_output_directory()
@@ -100,15 +104,56 @@ class IncrementalVideoStitcher:
 
         list_file_path = os.path.join(out_dir, "batch_concat_list.txt")
         out_name = f"{prefix}_{loop_idx:04d}.mp4"
+        temp_concat = os.path.join(out_dir, f"temp_concat_video_{loop_idx:04d}.mp4")
         final_output = os.path.join(out_dir, out_name)
 
         try:
             with open(list_file_path, 'w', encoding='utf-8') as f:
                 for video in session_video_list: f.write(f"file '{video}'\n")
 
-            ffmpeg_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file_path, "-c", "copy", final_output]
+            # Paso 1: Ensamblar los vídeos de forma silenciosa
+            ffmpeg_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file_path, "-c", "copy", temp_concat]
             subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            print(f"   -> ✅ Ensamblaje progresivo exitoso: {out_name}")
+
+            # Paso 2: Procesar e inyectar el Audio (si existe)
+            has_audio = audio is not None and isinstance(audio, list) and len(audio) > 0 and audio[0] is not None
+            if has_audio:
+                print(f"   -> 🎵 Audio detectado. Sincronizando y multiplexando...")
+
+                audio_data = audio[0]
+                waveform = audio_data.get("waveform")
+                sample_rate = audio_data.get("sample_rate", 44100)
+
+                if waveform is not None:
+                    # ComfyUI a veces envía el tensor como [Batch, Canales, Muestras]. Lo pasamos a [Canales, Muestras]
+                    if waveform.dim() == 3:
+                        waveform = waveform.squeeze(0)
+
+                    temp_audio_path = os.path.join(out_dir, f"temp_audio_{loop_idx:04d}.wav")
+                    torchaudio.save(temp_audio_path, waveform, sample_rate)
+
+                    # Multiplexamos usando -shortest para que el audio se corte donde termina el vídeo
+                    ffmpeg_mux_cmd = [
+                        "ffmpeg", "-y",
+                        "-i", temp_concat,
+                        "-i", temp_audio_path,
+                        "-c:v", "copy",
+                        "-c:a", "aac", "-b:a", "192k",
+                        "-shortest", final_output
+                    ]
+                    subprocess.run(ffmpeg_mux_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+                    if os.path.exists(temp_audio_path): os.remove(temp_audio_path)
+                    if os.path.exists(temp_concat): os.remove(temp_concat)
+                    print(f"   -> ✅ Ensamblaje progresivo CON AUDIO exitoso: {out_name}")
+                else:
+                    shutil.move(temp_concat, final_output)
+                    print(f"   -> ⚠️ Audio detectado pero sin waveform. Ensamblaje sin audio: {out_name}")
+            else:
+                # Si no hay audio conectado, simplemente renombramos el archivo temporal
+                shutil.move(temp_concat, final_output)
+                print(f"   -> ✅ Ensamblaje progresivo exitoso (Mudo): {out_name}")
+
         except Exception as e:
             print(f"   -> ❌ Error FFmpeg: {e}")
         finally:
