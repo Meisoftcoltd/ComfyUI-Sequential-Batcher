@@ -70,6 +70,9 @@ class SequentialLoopTrigger:
         return time.time()
 
     def trigger_next(self, trigger_dependency, target_loops, port, prompt=None, extra_pnginfo=None):
+        if trigger_dependency is None:
+            raise ValueError("❌ ERROR CRÍTICO: El nodo 'Loop Trigger' no tiene nada conectado en 'trigger_dependency'. Debes conectar la salida del Stitcher para que el bucle pueda continuar.")
+
         global global_loop_index
         next_loop = global_loop_index + 1
 

@@ -66,6 +66,12 @@ class IncrementalVideoStitcher:
     CATEGORY = "🔁 Sequential Batcher/Video"
 
     def stitch_incremental(self, trigger, output_prefix, current_loop_index, audio=None):
+        if not trigger or trigger[0] is None:
+            raise ValueError("❌ ERROR CRÍTICO: El nodo 'Incremental Auto-Stitcher' no recibe archivos de vídeo. Conecta la salida 'filenames' de tu Video Combine.")
+
+        if not current_loop_index or current_loop_index[0] is None:
+            raise ValueError("❌ ERROR CRÍTICO: El nodo 'Incremental Auto-Stitcher' necesita el cable de 'current_loop_index' para gestionar la sesión.")
+
         global session_video_list
 
         out_dir = folder_paths.get_output_directory()
