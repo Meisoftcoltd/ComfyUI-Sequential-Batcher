@@ -1,3 +1,4 @@
+import random
 import time
 import urllib.request
 import json
@@ -45,16 +46,15 @@ class SequentialLoopStart:
 
 @register_node
 class SequentialLoopTrigger:
-    """Se ejecuta al final del flujo. Incrementa el contador y auto-encola el siguiente ciclo si es necesario."""
+    """Se ejecuta al final del flujo. Incrementa el contador, muta las semillas y auto-encola el siguiente ciclo."""
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "trigger_dependency": ("*", ), # Cable obligatorio para forzar que espere al final
+                "trigger_dependency": ("*", ),
                 "target_loops": ("INT", {"default": 4, "min": 1, "max": 1000, "step": 1}),
-                "port": ("INT", {"default": 8188, "min": 1000, "max": 9999, "step": 1}), # Puerto de ComfyUI (estándar 8188)
+                "port": ("INT", {"default": 8188, "min": 1000, "max": 9999, "step": 1}),
             },
-            # MAGIA OCULTA: Pedimos a ComfyUI que nos pase el lienzo actual
             "hidden": {
                 "prompt": "PROMPT",
                 "extra_pnginfo": "EXTRA_PNGINFO"
@@ -69,19 +69,25 @@ class SequentialLoopTrigger:
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
-        return time.time() # Garantiza 100% una ruptura de caché
+        return time.time() # Garantiza 100% una ruptura de caché en nuestro nodo
 
     def trigger_next(self, trigger_dependency, target_loops, port, prompt=None, extra_pnginfo=None):
         global global_loop_index
 
-        # 1. Incrementamos el contador
         global_loop_index += 1
 
-        # 2. Comprobamos si debemos continuar
         if global_loop_index < target_loops:
             print(f"🚀 [Sequential Batcher] Loop Trigger: Ciclo {global_loop_index}/{target_loops}. Encolando automáticamente el siguiente lote...")
 
-            # 3. Preparamos la carga útil (payload) exactamente como la espera ComfyUI
+            # 💥 MAGIA ANTI-CACHÉ: Muta todas las semillas en el lienzo para obligar al Sampler a renderizar
+            if prompt is not None:
+                for node_id, node_data in prompt.items():
+                    inputs = node_data.get("inputs", {})
+                    for key in ["seed", "noise_seed"]:
+                        if key in inputs and isinstance(inputs[key], (int, float)):
+                            # Generamos una semilla de 32 bits compatible con Samplers antiguos
+                            inputs[key] = random.randint(1, 0xffffffff)
+
             p = {"prompt": prompt}
             if extra_pnginfo:
                 p["extra_data"] = {"extra_pnginfo": extra_pnginfo}
@@ -89,15 +95,13 @@ class SequentialLoopTrigger:
             data = json.dumps(p).encode('utf-8')
             req = urllib.request.Request(f"http://127.0.0.1:{port}/prompt", data=data, headers={'Content-Type': 'application/json'})
 
-            # 4. Disparamos la petición a nuestro propio servidor con timeout de 5s para evitar cuelgues
             try:
                 urllib.request.urlopen(req, timeout=5)
-                print("✅ [Sequential Batcher] Loop Trigger: Siguiente lote inyectado en la cola con éxito.")
+                print("✅ [Sequential Batcher] Loop Trigger: Siguiente lote mutado e inyectado con éxito.")
             except Exception as e:
                 print(f"❌ [Sequential Batcher] Error al auto-encolar: {e}")
         else:
             print(f"🏁 [Sequential Batcher] Loop Trigger: ¡Generación finalizada! Se han completado los {target_loops} ciclos.")
-            # Reseteamos automáticamente para la próxima vez que el usuario pulse Queue
             global_loop_index = 0
 
         return ()
