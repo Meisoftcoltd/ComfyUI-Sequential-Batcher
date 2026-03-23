@@ -7,32 +7,25 @@ from PIL import Image
 import folder_paths
 from . import register_node
 
-# Variable global para almacenar el último fotograma en la memoria del sistema (RAM)
 global_session_image = None
 
 def tensor_to_temp_image(tensor_image, prefix="session_img"):
-    """Convierte un tensor de ComfyUI [1, H, W, C] a PNG temporal para la UI."""
     temp_dir = folder_paths.get_temp_directory()
     filename = f"{prefix}_{random.randint(10000, 99999)}.png"
     filepath = os.path.join(temp_dir, filename)
-
-    # Extraemos el primer (y único) frame del tensor y lo convertimos
     img_array = 255. * tensor_image[0].cpu().numpy()
     img = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
     img.save(filepath)
-
     return {"filename": filename, "subfolder": "", "type": "temp"}
-
 
 @register_node
 class SessionImageReceiver:
-    """Proporciona la imagen inicial o la última generada, leyendo de la memoria RAM."""
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
                 "initial_image": ("IMAGE",),
-                "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000, "step": 1}),
+                "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000}),
             },
         }
 
@@ -44,36 +37,39 @@ class SessionImageReceiver:
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
-        return time.time() # Garantiza 100% una ruptura de caché
+        return time.time()
 
     def get_image(self, initial_image, current_loop_index):
         global global_session_image
-
-        # Extracción segura obligatoria por si hay listas
         loop_idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
-        is_first_cycle = (loop_idx == 0)
+        is_first = (loop_idx == 0)
 
-        if is_first_cycle or global_session_image is None:
-            global_session_image = initial_image.clone().cpu() # Guardamos en CPU por seguridad
-            print(f"[Sequential Batcher] Receiver: Ciclo {loop_idx}. Iniciando sesión con la imagen original.")
+        print(f"\n{'='*50}")
+        print(f"📥 [DEBUG] NODO: Image Receiver")
+        print(f"   -> Ciclo actual detectado: {loop_idx}")
+
+        if is_first or global_session_image is None:
+            global_session_image = initial_image.clone().cpu()
+            print(f"   -> 🆕 Iniciando sesión con la imagen ORIGINAL.")
             selected = initial_image
         else:
-            print(f"[Sequential Batcher] Receiver: Ciclo {loop_idx}. Usando el fotograma rescatado de la RAM.")
-            # Movemos de vuelta a la GPU (o dejamos que ComfyUI lo asigne)
+            print(f"   -> ♻️ Usando el fotograma rescatado de la RAM.")
             selected = global_session_image
+
+        print(f"   -> 🖼️ Tensor shape: {selected.shape}")
+        print(f"{'='*50}\n")
 
         ui_image = tensor_to_temp_image(selected, "receiver")
         return {"ui": {"images": [ui_image]}, "result": (selected, )}
 
-
 @register_node
 class SessionImageSender:
-    """Extrae, guarda en memoria del sistema (CPU) y muestra el último fotograma."""
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
                 "generated_images": ("IMAGE",),
+                "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000}),
             },
         }
 
@@ -85,16 +81,31 @@ class SessionImageSender:
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
-        return time.time() # Garantiza 100% una ruptura de caché
+        return time.time()
 
-    def set_image(self, generated_images):
+    def set_image(self, generated_images, current_loop_index):
         global global_session_image
+        loop_idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
 
-        # CRÍTICO: .cpu() asegura que ComfyUI no destruya el tensor al vaciar la VRAM de la gráfica
+        print(f"\n{'='*50}")
+        print(f"📤 [DEBUG] NODO: Image Sender")
+        print(f"   -> Ciclo actual: {loop_idx} | Frames recibidos: {generated_images.shape[0]}")
+
         last_frame = generated_images[-1:].clone().cpu()
         global_session_image = last_frame
 
-        print(f"[Sequential Batcher] Sender: Último fotograma capturado y asegurado en la RAM del sistema.")
+        # Guardar disco progresivo
+        out_dir = folder_paths.get_output_directory()
+        filename = f"keyframe_{loop_idx:03d}.png"
+        filepath = os.path.join(out_dir, filename)
+
+        img_array = 255. * last_frame[0].numpy()
+        img = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
+        img.save(filepath)
+
+        print(f"   -> 💾 Keyframe guardado físicamente: {filename}")
+        print(f"   -> 🧠 RAM asegurada para el próximo ciclo.")
+        print(f"{'='*50}\n")
 
         ui_image = tensor_to_temp_image(last_frame, "sender")
         return {"ui": {"images": [ui_image]}}

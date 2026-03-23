@@ -40,21 +40,17 @@ class WanFrameValidator:
 
         return (corrected_frames, )
 
-# Variable global en memoria. Se vacía automáticamente al reiniciar ComfyUI.
 session_video_list = []
 
 @register_node
 class IncrementalVideoStitcher:
-    """Une los vídeos de la sesión actual extrayéndolos estrictamente del JSON del VHS."""
-
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                # Recibe la lista/JSON de VHS_VideoCombine
                 "trigger": ("VHS_FILENAMES", ),
-                "output_filename": ("STRING", {"default": "Pelicula_Final_Sesion.mp4"}),
-                "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000, "step": 1}),
+                "output_prefix": ("STRING", {"default": "SCAIL_Final"}),
+                "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000}),
             },
         }
 
@@ -65,75 +61,58 @@ class IncrementalVideoStitcher:
     FUNCTION = "stitch_incremental"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
-    def stitch_incremental(self, trigger, output_filename, current_loop_index):
+    def stitch_incremental(self, trigger, output_prefix, current_loop_index):
         global session_video_list
 
-        if not shutil.which("ffmpeg"):
-            print("[Sequential Batcher] Error de FFmpeg: No está instalado.")
-            return ("", )
-
         out_dir = folder_paths.get_output_directory()
-        out_name = output_filename[0] if isinstance(output_filename, list) else output_filename
-
-        # Extracción segura obligatoria por INPUT_IS_LIST = True
+        prefix = output_prefix[0] if isinstance(output_prefix, list) else output_prefix
         loop_idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
 
-        # LÓGICA NATIVA: Si es el primer ciclo, vaciamos la lista
-        is_first_cycle = (loop_idx == 0)
+        print(f"\n{'='*50}")
+        print(f"🎞️ [DEBUG] NODO: Incremental Auto-Stitcher")
+        print(f"   -> Ciclo actual: {loop_idx} | Prefix: {prefix}")
 
-        if is_first_cycle:
-            print(f"[Sequential Batcher] Auto-Stitcher: Ciclo {loop_idx}. Vaciando memoria de la sesión.")
+        if loop_idx == 0:
+            print(f"   -> 🧹 Limpiando lista de vídeos de sesiones anteriores.")
             session_video_list.clear()
 
-        # 1. Extracción recursiva: buscar cualquier archivo .mp4 dentro del JSON/lista recibido
         current_mp4s = []
         def extract_mp4s(data):
             if isinstance(data, str) and data.endswith(".mp4"):
                 current_mp4s.append(data)
-            elif isinstance(data, list) or isinstance(data, tuple):
-                for item in data:
-                    extract_mp4s(item)
+            elif isinstance(data, (list, tuple)):
+                for item in data: extract_mp4s(item)
             elif isinstance(data, dict):
-                for item in data.values():
-                    extract_mp4s(item)
-
+                for item in data.values(): extract_mp4s(item)
         extract_mp4s(trigger)
 
-        # 2. Añadir los vídeos detectados a la memoria de la sesión (evitando duplicados)
-        for video_path in current_mp4s:
-            # Asegurar ruta absoluta dentro del directorio de salida si es relativa
-            if not os.path.isabs(video_path):
-                abs_video_path = os.path.join(out_dir, video_path)
-            else:
-                abs_video_path = video_path
+        for v in current_mp4s:
+            abs_path = v if os.path.isabs(v) else os.path.join(out_dir, v)
+            if abs_path not in session_video_list and os.path.exists(abs_path):
+                session_video_list.append(abs_path)
+                print(f"   -> ➕ Añadido al ensamblaje: {os.path.basename(abs_path)}")
 
-            # Evitamos añadir el propio archivo de salida a la lista si se cuela, y comprobamos existencia
-            if not abs_video_path.endswith(out_name) and abs_video_path not in session_video_list and os.path.exists(abs_video_path):
-                session_video_list.append(abs_video_path)
+        print(f"   -> 📦 Total de vídeos a ensamblar: {len(session_video_list)}")
 
         if not session_video_list:
-            print("[Sequential Batcher] El JSON de entrada no contenía vídeos nuevos para unir, o la lista está vacía.")
+            print(f"{'='*50}\n")
             return ("", )
 
-        # 3. Crear el listado para FFmpeg usando ESTRICTAMENTE la memoria de sesión
-        list_file_path = os.path.join(out_dir, "batch_concat_exact_list.txt")
+        list_file_path = os.path.join(out_dir, "batch_concat_list.txt")
+        out_name = f"{prefix}_{loop_idx:04d}.mp4"
+        final_output = os.path.join(out_dir, out_name)
+
         try:
             with open(list_file_path, 'w', encoding='utf-8') as f:
-                for video in session_video_list:
-                    f.write(f"file '{video}'\n")
+                for video in session_video_list: f.write(f"file '{video}'\n")
 
-            final_output = os.path.join(out_dir, out_name)
-            ffmpeg_cmd = [
-                "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-                "-i", list_file_path, "-c", "copy", final_output
-            ]
-
+            ffmpeg_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file_path, "-c", "copy", final_output]
             subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            print(f"[Sequential Batcher] Ensamblaje Exacto: {len(session_video_list)} vídeos unidos de la sesión actual.")
-        except subprocess.CalledProcessError as e:
-            print(f"[Sequential Batcher] Error de FFmpeg: {e.stderr.decode()}")
+            print(f"   -> ✅ Ensamblaje progresivo exitoso: {out_name}")
+        except Exception as e:
+            print(f"   -> ❌ Error FFmpeg: {e}")
         finally:
-            if os.path.exists(list_file_path):
-                os.remove(list_file_path)
+            if os.path.exists(list_file_path): os.remove(list_file_path)
 
+        print(f"{'='*50}\n")
         return (final_output, )

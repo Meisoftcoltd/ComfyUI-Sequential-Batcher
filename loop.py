@@ -4,17 +4,16 @@ import urllib.request
 import json
 from . import register_node
 
-# Variable global para mantener el estado del bucle entre ejecuciones
 global_loop_index = 0
 
 @register_node
 class SequentialLoopStart:
-    """Inicia el bucle y provee el índice actual a los nodos de imagen y vídeo."""
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
                 "reset_loop": ("BOOLEAN", {"default": False}),
+                "loop_idx": ("INT", {"default": 0, "min": 0, "max": 10000}), # Inyectado por el Trigger
             }
         }
 
@@ -25,40 +24,39 @@ class SequentialLoopStart:
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
-        return time.time() # Garantiza 100% una ruptura de caché
+        return time.time()
 
-    def get_index(self, reset_loop):
+    def get_index(self, reset_loop, loop_idx):
         global global_loop_index
 
-        # Saneamiento de booleano por si viene de un text input
-        is_reset = False
-        if isinstance(reset_loop, str):
-            is_reset = reset_loop.strip().lower() in ['true', '1', 't', 'y', 'yes']
-        else:
-            is_reset = bool(reset_loop)
+        print(f"\n{'='*50}")
+        print(f"🚀 [DEBUG] NODO: Loop Start")
+        print(f"   -> Input loop_idx (UI/Trigger): {loop_idx}")
+        print(f"   -> Input reset_loop: {reset_loop}")
 
+        is_reset = str(reset_loop).lower() in ['true', '1', 't', 'y']
         if is_reset:
             global_loop_index = 0
-            print("🔄 [Sequential Batcher] Loop Start: Bucle reiniciado a 0 manualmente.")
+            print("   -> 🔄 Bucle reiniciado a 0 manualmente.")
+        else:
+            global_loop_index = loop_idx
 
-        print(f"🔄 [Sequential Batcher] Loop Start: Ejecutando ciclo {global_loop_index}.")
+        print(f"   -> 📤 OUTPUT current_loop_index: {global_loop_index}")
+        print(f"{'='*50}\n")
+
         return (global_loop_index, )
 
 @register_node
 class SequentialLoopTrigger:
-    """Se ejecuta al final del flujo. Incrementa el contador, muta las semillas y auto-encola el siguiente ciclo."""
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
                 "trigger_dependency": ("*", ),
-                "target_loops": ("INT", {"default": 4, "min": 1, "max": 1000, "step": 1}),
-                "port": ("INT", {"default": 8188, "min": 1000, "max": 9999, "step": 1}),
+                "target_loops": ("INT", {"default": 4, "min": 1, "max": 1000}),
+                "port": ("INT", {"default": 8188, "min": 1000, "max": 9999}),
             },
-            "hidden": {
-                "prompt": "PROMPT",
-                "extra_pnginfo": "EXTRA_PNGINFO"
-            }
+            "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"}
         }
 
     RETURN_TYPES = ()
@@ -69,39 +67,47 @@ class SequentialLoopTrigger:
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
-        return time.time() # Garantiza 100% una ruptura de caché en nuestro nodo
+        return time.time()
 
     def trigger_next(self, trigger_dependency, target_loops, port, prompt=None, extra_pnginfo=None):
         global global_loop_index
+        next_loop = global_loop_index + 1
 
-        global_loop_index += 1
+        print(f"\n{'='*50}")
+        print(f"🎯 [DEBUG] NODO: Loop Trigger")
+        print(f"   -> Ciclo terminado: {global_loop_index} | Target: {target_loops}")
 
-        if global_loop_index < target_loops:
-            print(f"🚀 [Sequential Batcher] Loop Trigger: Ciclo {global_loop_index}/{target_loops}. Encolando automáticamente el siguiente lote...")
-
-            # 💥 MAGIA ANTI-CACHÉ: Muta todas las semillas en el lienzo para obligar al Sampler a renderizar
+        if next_loop < target_loops:
+            print(f"   -> ⚙️ Preparando Ciclo {next_loop}...")
             if prompt is not None:
+                m_seeds = 0
                 for node_id, node_data in prompt.items():
                     inputs = node_data.get("inputs", {})
+                    # Mutar Semillas
                     for key in ["seed", "noise_seed"]:
                         if key in inputs and isinstance(inputs[key], (int, float)):
-                            # Generamos una semilla de 32 bits compatible con Samplers antiguos
                             inputs[key] = random.randint(1, 0xffffffff)
+                            m_seeds += 1
+                    # 💥 INYECCIÓN ANTI-CACHÉ: Forzar a Loop Start a leer el nuevo índice
+                    if node_data.get("class_type") == "SequentialLoopStart":
+                        inputs["loop_idx"] = next_loop
+                        inputs["reset_loop"] = False
+                        print(f"   -> 💉 Inyectado loop_idx={next_loop} en LoopStart (Nodo {node_id})")
+                print(f"   -> 🎲 Semillas mutadas: {m_seeds}")
 
             p = {"prompt": prompt}
             if extra_pnginfo:
                 p["extra_data"] = {"extra_pnginfo": extra_pnginfo}
-
             data = json.dumps(p).encode('utf-8')
             req = urllib.request.Request(f"http://127.0.0.1:{port}/prompt", data=data, headers={'Content-Type': 'application/json'})
-
             try:
                 urllib.request.urlopen(req, timeout=5)
-                print("✅ [Sequential Batcher] Loop Trigger: Siguiente lote mutado e inyectado con éxito.")
+                print(f"   -> ✅ Ciclo {next_loop} inyectado en la cola.")
             except Exception as e:
-                print(f"❌ [Sequential Batcher] Error al auto-encolar: {e}")
+                print(f"   -> ❌ Error HTTP: {e}")
         else:
-            print(f"🏁 [Sequential Batcher] Loop Trigger: ¡Generación finalizada! Se han completado los {target_loops} ciclos.")
+            print(f"   -> 🏁 ¡Generación finalizada! ({target_loops} ciclos)")
             global_loop_index = 0
 
+        print(f"{'='*50}\n")
         return ()
