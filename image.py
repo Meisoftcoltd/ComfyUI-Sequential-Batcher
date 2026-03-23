@@ -84,6 +84,12 @@ class SessionImageSender:
         return time.time()
 
     def set_image(self, generated_images, current_loop_index):
+        if generated_images is None:
+            raise ValueError("❌ ERROR CRÍTICO: El nodo 'Session Image Sender' no está recibiendo imágenes. Conecta la salida de tu VAE Decode o Sampler.")
+
+        if current_loop_index is None:
+            raise ValueError("❌ ERROR CRÍTICO: El nodo 'Session Image Sender' necesita el cable de 'current_loop_index' desde el Loop Start para nombrar los archivos.")
+
         global global_session_image
         loop_idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
 
