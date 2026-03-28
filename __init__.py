@@ -20,6 +20,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     
     # Video (Ensamblaje y Validación)
     "IncrementalVideoStitcher": "🎞️ Incremental Auto-Stitcher",
+    "LoadVideoWithSourceAudio": "🎥 Load Video + Source Audio",
     "WanFrameValidator": "🛡️ Wan Frame Validator",
 
     # Loop (Orquestación Autónoma)
