@@ -3,6 +3,7 @@ import torch
 import torchaudio
 import folder_paths
 import nodes
+import time
 from . import register_node
 
 @register_node
@@ -21,60 +22,90 @@ class WanFrameValidator:
         print(f"🛡️ [Wan Validator] Fotogramas ajustados: {corrected_frames}")
         return (max(1, corrected_frames), )
 
-# 1. Obtenemos la clase original de VHS para heredar de ella
-vhs_load_video_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
+@register_node
+class LoadVideoWithSourceAudio:
+    @classmethod
+    def INPUT_TYPES(cls):
+        # 1. Obtenemos los inputs de VHS dinámicamente en tiempo de ejecución de la UI
+        vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
+        if vhs_class:
+            inputs = vhs_class.INPUT_TYPES()
+            if "video" in inputs.get("required", {}):
+                video_in = inputs["required"]["video"]
+                # Desempaquetado seguro
+                if isinstance(video_in, (tuple, list)) and len(video_in) >= 2:
+                    v_type, v_params = video_in[0], video_in[1]
+                else:
+                    v_type = video_in if isinstance(video_in, str) else "VIDEO"
+                    v_params = {}
 
-if vhs_load_video_class:
-    @register_node
-    class LoadVideoWithSourceAudio(vhs_load_video_class):
-        # Heredamos todo de VHS, solo añadimos nuestra salida extra
-        RETURN_TYPES = vhs_load_video_class.RETURN_TYPES + ("AUDIO",)
+                v_params["video_upload"] = True
+                inputs["required"]["video"] = (v_type, v_params)
+            return inputs
+        return {"required": {"video": ("VIDEO", {"video_upload": True})}}
 
-        # Intentamos heredar los nombres si existen, si no, usamos los por defecto + el nuestro
-        _base_names = getattr(vhs_load_video_class, "RETURN_NAMES", ("IMAGE", "frame_count", "audio", "video_info"))
-        RETURN_NAMES = _base_names + ("source_audio",)
+    RETURN_TYPES = ("IMAGE", "INT", "AUDIO", "VHS_VIDEOINFO", "AUDIO")
+    RETURN_NAMES = ("IMAGE", "frame_count", "audio", "video_info", "source_audio")
+    FUNCTION = "load_video_with_audio"
+    CATEGORY = "🔁 Sequential Batcher/Video"
 
-        FUNCTION = "load_video_with_source_audio"
-        CATEGORY = "🔁 Sequential Batcher/Video"
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return time.time()
 
-        def load_video_with_source_audio(self, **kwargs):
-            # 1. Ejecutamos la función original del padre (VHS) tal cual
-            vhs_func_name = vhs_load_video_class.FUNCTION
-            vhs_func = getattr(self, vhs_func_name)
-            vhs_output = vhs_func(**kwargs)
+    @classmethod
+    def VALIDATE_INPUTS(cls, video, **kwargs):
+        path = folder_paths.get_annotated_filepath(video)
+        return True if os.path.exists(path) else f"Archivo no encontrado: {path}"
 
-            # 2. Gestionamos si VHS devolvió la interfaz de vista previa o solo resultados
-            if isinstance(vhs_output, dict):
-                res = list(vhs_output["result"])
-                ui = vhs_output.get("ui", {})
-            else:
-                res = list(vhs_output)
-                ui = {}
+    def load_video_with_audio(self, **kwargs):
+        vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
+        if not vhs_class:
+            raise Exception("❌ VideoHelperSuite no está instalado o cargado.")
 
-            # 3. Nuestra lógica añadida: Extraer audio fuente de forma segura
-            raw_video = kwargs.get("video")
-            video_name = raw_video[0] if isinstance(raw_video, (list, tuple)) else raw_video
+        vhs_instance = vhs_class()
 
-            video_path = folder_paths.get_annotated_filepath(video_name) if video_name else ""
-            source_audio = None
-            try:
-                if os.path.exists(video_path):
-                    waveform, sample_rate = torchaudio.load(video_path)
-                    source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
-            except Exception as e:
-                print(f"⚠️ [LoadVideo] Error extrayendo source_audio: {e}")
+        # 2. EL TRUCO MÁGICO: Preguntamos a VHS qué parámetros exactos acepta en esta versión
+        vhs_inputs = vhs_class.INPUT_TYPES()
+        allowed_keys = set()
+        for cat in ["required", "optional", "hidden"]:
+            if cat in vhs_inputs:
+                allowed_keys.update(vhs_inputs[cat].keys())
 
-            # 4. Añadimos el audio al final de la lista original de salidas
+        # 3. Filtramos los kwargs estrictamente por lo que VHS nos acaba de decir
+        vhs_kwargs = {k: v for k, v in kwargs.items() if k in allowed_keys}
+
+        # 4. Ejecutamos VHS de forma segura
+        vhs_output = vhs_instance.load_video(**vhs_kwargs)
+
+        # Extraemos retornos
+        if isinstance(vhs_output, dict):
+            res = list(vhs_output.get("result", []))
+            ui = vhs_output.get("ui", {})
+        else:
+            res = list(vhs_output)
+            ui = {}
+
+        # 5. Extraer audio original
+        raw_video = kwargs.get("video")
+        video_name = raw_video[0] if isinstance(raw_video, (list, tuple)) else raw_video
+        video_path = folder_paths.get_annotated_filepath(video_name) if video_name else ""
+
+        source_audio = None
+        try:
+            if os.path.exists(video_path):
+                waveform, sample_rate = torchaudio.load(video_path)
+                source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
+        except Exception as e:
+            print(f"⚠️ [LoadVideo] Error extrayendo source_audio: {e}")
+
+        # Añadimos la quinta salida (el source audio)
+        if len(res) >= 4:
+            res = [res[0], res[1], res[2], res[3], source_audio]
+        else:
             res.append(source_audio)
 
-            # 5. Devolvemos el paquete exactamente en el formato que espera ComfyUI
-            if isinstance(vhs_output, dict):
-                return {"ui": ui, "result": tuple(res)}
-            else:
-                return tuple(res)
-else:
-    print("⚠️ [Advertencia] VideoHelperSuite no encontrado. LoadVideoWithSourceAudio no funcionará.")
-
+        return {"ui": ui, "result": tuple(res)}
 
 @register_node
 class IncrementalVideoStitcher:
@@ -103,7 +134,6 @@ class IncrementalVideoStitcher:
         print(f"🎞️ [Stitcher] Lote {current_loop_index} guardado en disco.")
 
         if current_loop_index < total_loops - 1:
-            # Micro-tensor (8x8) para mantener cables activos sin petar la memoria
             return (torch.zeros((1, 8, 8, 3)), None)
 
         print(f"📦 [Stitcher] Ensamblando todos los lotes de vídeo...")
