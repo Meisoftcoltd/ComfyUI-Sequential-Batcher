@@ -30,12 +30,12 @@ The system is built around three major categories:
 6. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Progressively archives generated tensors directly to the hard drive and safely assembles them at the end of all cycles.
    - **🧠 Zero OOM (New!):** Replaces RAM accumulation with progressive temporary disk saves (`.pt`), clearing system memory immediately to enable infinite video processing without crashing the system. By disabling `INPUT_IS_LIST`, it handles raw tensors efficiently.
    - **🎵 Audio Passthrough (New!):** Feeds the original pure audio straight to the assembled output during the final loop iteration (returning `None` during intermediate loops to save resources).
-7. **🎥 Load Video + Source Audio (`LoadVideoWithSourceAudio`)**: (New!) Functions exactly like the standard VHS video loader (including UI preview widget and upload button), but extracts and safely exposes the **complete**, uncropped original audio track to ensure it travels unaltered throughout the sequential process.
+7. **🎥 Load Video + Source Audio (`LoadVideoWithSourceAudio`)**: (New!) This node **inherits directly from the original VHS class (`VHS_LoadVideo`)**. It functions exactly the same (including validations, UI preview widget, and upload button), but extracts and safely exposes the **complete**, uncropped original audio track to ensure it travels unaltered throughout the sequential process.
 
 ## Setup & Usage
 
 ### Prerequisites
-- **VideoHelperSuite (VHS)**: Dynamically required for the `Load Video + Source Audio` node to function and replicate its UI seamlessly.
+- **VideoHelperSuite (VHS)**: **Mandatory** for the `Load Video + Source Audio` node to function. Since it inherits from its base class, if VHS is not installed in your ComfyUI environment, this node will not load.
 - **FFmpeg**: Must be installed and available in your system's PATH to manage underlying video operations.
 - **Torchaudio**: (Usually included in ComfyUI environments) is required to extract the original pure audio track from the source.
 

@@ -3,7 +3,6 @@ import torch
 import torchaudio
 import folder_paths
 import nodes
-import time
 from . import register_node
 
 @register_node
@@ -17,75 +16,65 @@ class WanFrameValidator:
     CATEGORY = "🔁 Sequential Batcher/Video"
 
     def validate(self, target_frames):
-        # Fórmula 4k+1 para WanVideo
         k = (target_frames - 1) // 4
         corrected_frames = (4 * k) + 1
         print(f"🛡️ [Wan Validator] Fotogramas ajustados: {corrected_frames}")
         return (max(1, corrected_frames), )
 
-@register_node
-class LoadVideoWithSourceAudio:
-    @classmethod
-    def INPUT_TYPES(s):
-        vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
-        if vhs_class:
-            inputs = vhs_class.INPUT_TYPES()
-            if "video" in inputs["required"]:
-                video_in = inputs["required"]["video"]
-                # 🛠️ FIX: Blindaje contra errores de desempaquetado (Unpacking fix)
-                if isinstance(video_in, (tuple, list)) and len(video_in) >= 2:
-                    v_type, v_params = video_in
-                else:
-                    v_type = video_in if isinstance(video_in, str) else "VIDEO"
-                    v_params = {}
+# 1. Obtenemos la clase original de VHS para heredar de ella
+vhs_load_video_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
 
-                v_params["video_upload"] = True
-                inputs["required"]["video"] = (v_type, v_params)
-            return inputs
-        return {"required": {"video": ("VIDEO", {"video_upload": True})}}
+if vhs_load_video_class:
+    @register_node
+    class LoadVideoWithSourceAudio(vhs_load_video_class):
+        # Heredamos todo de VHS, solo añadimos nuestra salida extra
+        RETURN_TYPES = vhs_load_video_class.RETURN_TYPES + ("AUDIO",)
 
-    RETURN_TYPES = ("IMAGE", "INT", "AUDIO", "VHS_VIDEOINFO", "AUDIO")
-    RETURN_NAMES = ("IMAGE", "frame_count", "audio", "video_info", "source_audio")
-    FUNCTION = "load_video_with_audio"
-    CATEGORY = "🔁 Sequential Batcher/Video"
+        # Intentamos heredar los nombres si existen, si no, usamos los por defecto + el nuestro
+        _base_names = getattr(vhs_load_video_class, "RETURN_NAMES", ("IMAGE", "frame_count", "audio", "video_info"))
+        RETURN_NAMES = _base_names + ("source_audio",)
 
-    @classmethod
-    def IS_CHANGED(s, video, **kwargs):
-        # Forzamos refresco de caché para evitar bloqueos en el bucle
-        return time.time()
+        FUNCTION = "load_video_with_source_audio"
+        CATEGORY = "🔁 Sequential Batcher/Video"
 
-    @classmethod
-    def VALIDATE_INPUTS(s, video, **kwargs):
-        path = folder_paths.get_annotated_filepath(video)
-        return True if os.path.exists(path) else f"Archivo no encontrado: {path}"
+        def load_video_with_source_audio(self, **kwargs):
+            # 1. Ejecutamos la función original del padre (VHS) tal cual
+            vhs_func_name = vhs_load_video_class.FUNCTION
+            vhs_func = getattr(self, vhs_func_name)
+            vhs_output = vhs_func(**kwargs)
 
-    def load_video_with_audio(self, **kwargs):
-        vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
-        vhs_instance = vhs_class()
+            # 2. Gestionamos si VHS devolvió la interfaz de vista previa o solo resultados
+            if isinstance(vhs_output, dict):
+                res = list(vhs_output["result"])
+                ui = vhs_output.get("ui", {})
+            else:
+                res = list(vhs_output)
+                ui = {}
 
-        # 🛠️ FIX: Filtro estricto para evitar el error 'force_rate' al llamar a VHS
-        vhs_keys = ["video", "force_rate", "frame_load_cap", "skip_first_frames",
-                    "select_every_nth", "meta_batch", "vae", "format"]
-        vhs_kwargs = {k: v for k, v in kwargs.items() if k in vhs_keys}
+            # 3. Nuestra lógica añadida: Extraer audio fuente de forma segura
+            raw_video = kwargs.get("video")
+            video_name = raw_video[0] if isinstance(raw_video, (list, tuple)) else raw_video
 
-        vhs_output = vhs_instance.load_video(**vhs_kwargs)
+            video_path = folder_paths.get_annotated_filepath(video_name) if video_name else ""
+            source_audio = None
+            try:
+                if os.path.exists(video_path):
+                    waveform, sample_rate = torchaudio.load(video_path)
+                    source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
+            except Exception as e:
+                print(f"⚠️ [LoadVideo] Error extrayendo source_audio: {e}")
 
-        # Gestionamos si VHS devuelve diccionario (con UI preview) o tupla
-        if isinstance(vhs_output, dict):
-            res, ui = vhs_output["result"], vhs_output.get("ui", {})
-        else:
-            res, ui = vhs_output, {}
+            # 4. Añadimos el audio al final de la lista original de salidas
+            res.append(source_audio)
 
-        # Extraer audio original para el montaje final
-        video_path = folder_paths.get_annotated_filepath(kwargs.get("video"))
-        source_audio = None
-        try:
-            waveform, sample_rate = torchaudio.load(video_path)
-            source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
-        except Exception as e:
-            print(f"⚠️ [LoadVideo] Error al extraer audio: {e}")
+            # 5. Devolvemos el paquete exactamente en el formato que espera ComfyUI
+            if isinstance(vhs_output, dict):
+                return {"ui": ui, "result": tuple(res)}
+            else:
+                return tuple(res)
+else:
+    print("⚠️ [Advertencia] VideoHelperSuite no encontrado. LoadVideoWithSourceAudio no funcionará.")
 
-        return {"ui": ui, "result": (res[0], res[1], res[2], res[3], source_audio)}
 
 @register_node
 class IncrementalVideoStitcher:
@@ -109,26 +98,24 @@ class IncrementalVideoStitcher:
         cache_dir = os.path.join(folder_paths.get_temp_directory(), "wan_stitcher_cache")
         os.makedirs(cache_dir, exist_ok=True)
 
-        # 💾 Guardado progresivo en disco (CPU) para proteger la VRAM
         path = os.path.join(cache_dir, f"batch_{current_loop_index:04d}.pt")
         torch.save(images.cpu(), path)
         print(f"🎞️ [Stitcher] Lote {current_loop_index} guardado en disco.")
 
         if current_loop_index < total_loops - 1:
-            # Ciclos intermedios: Micro-tensor (8x8) para mantener cables activos sin OOM
+            # Micro-tensor (8x8) para mantener cables activos sin petar la memoria
             return (torch.zeros((1, 8, 8, 3)), None)
 
-        # 🚀 CICLO FINAL: Ensamblaje total
-        print(f"📦 [Stitcher] Uniendo {total_loops} lotes de vídeo...")
+        print(f"📦 [Stitcher] Ensamblando todos los lotes de vídeo...")
         all_tensors = []
         for i in range(total_loops):
             p = os.path.join(cache_dir, f"batch_{i:04d}.pt")
             if os.path.exists(p):
                 all_tensors.append(torch.load(p))
-                try: os.remove(p) # Limpieza de temporales
+                try: os.remove(p)
                 except: pass
 
         final_images = torch.cat(all_tensors, dim=0)
-        print(f"✅ [Stitcher] Vídeo ensamblado con éxito: {final_images.shape[0]} frames.")
+        print(f"✅ [Stitcher] Vídeo completado: {final_images.shape[0]} frames.")
 
         return (final_images, audio)
