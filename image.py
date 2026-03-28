@@ -26,6 +26,7 @@ class SessionImageReceiver:
             "required": {
                 "initial_image": ("IMAGE",),
                 "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000}),
+                "total_loops": ("INT", {"default": 1, "min": 1, "max": 10000}), # NUEVO
             },
         }
 
@@ -39,14 +40,14 @@ class SessionImageReceiver:
     def IS_CHANGED(cls, **kwargs):
         return time.time()
 
-    def get_image(self, initial_image, current_loop_index):
+    def get_image(self, initial_image, current_loop_index, total_loops):
         global global_session_image
         loop_idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
         is_first = (loop_idx == 0)
 
         print(f"\n{'='*50}")
         print(f"📥 [DEBUG] NODO: Image Receiver")
-        print(f"   -> Ciclo actual detectado: {loop_idx}")
+        print(f"   -> Ciclo actual detectado: {loop_idx} / {total_loops - 1}")
 
         if is_first or global_session_image is None:
             global_session_image = initial_image.clone().cpu()
@@ -70,6 +71,7 @@ class SessionImageSender:
             "required": {
                 "generated_images": ("IMAGE",),
                 "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000}),
+                "total_loops": ("INT", {"default": 1, "min": 1, "max": 10000}), # NUEVO
             },
         }
 
@@ -83,7 +85,7 @@ class SessionImageSender:
     def IS_CHANGED(cls, **kwargs):
         return time.time()
 
-    def set_image(self, generated_images, current_loop_index):
+    def set_image(self, generated_images, current_loop_index, total_loops):
         if generated_images is None:
             raise ValueError("❌ ERROR CRÍTICO: El nodo 'Session Image Sender' no está recibiendo imágenes. Conecta la salida de tu VAE Decode o Sampler.")
 
@@ -95,7 +97,7 @@ class SessionImageSender:
 
         print(f"\n{'='*50}")
         print(f"📤 [DEBUG] NODO: Image Sender")
-        print(f"   -> Ciclo actual: {loop_idx} | Frames recibidos: {generated_images.shape[0]}")
+        print(f"   -> Ciclo actual: {loop_idx} / {total_loops - 1} | Frames recibidos: {generated_images.shape[0]}")
 
         last_frame = generated_images[-1:].clone().cpu()
         global_session_image = last_frame
