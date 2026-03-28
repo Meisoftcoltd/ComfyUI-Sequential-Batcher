@@ -40,26 +40,14 @@ class WanFrameValidator:
 class LoadVideoWithSourceAudio:
     @classmethod
     def INPUT_TYPES(cls):
-        # 1. Obtenemos los inputs de VHS dinámicamente en tiempo de ejecución de la UI
         vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
         if vhs_class:
-            inputs = vhs_class.INPUT_TYPES()
-            if "video" in inputs.get("required", {}):
-                video_in = inputs["required"]["video"]
-                # Desempaquetado seguro
-                if isinstance(video_in, (tuple, list)) and len(video_in) >= 2:
-                    v_type, v_params = video_in[0], video_in[1]
-                else:
-                    v_type = video_in if isinstance(video_in, str) else "VIDEO"
-                    v_params = {}
+            return vhs_class.INPUT_TYPES()
+        return {"required": {"video": ("STRING", {"image_upload": True})}}
 
-                v_params["video_upload"] = True
-                inputs["required"]["video"] = (v_type, v_params)
-            return inputs
-        return {"required": {"video": ("VIDEO", {"video_upload": True})}}
-
-    RETURN_TYPES = ("IMAGE", "INT", "AUDIO", "VHS_VIDEOINFO", "AUDIO")
-    RETURN_NAMES = ("IMAGE", "frame_count", "audio", "video_info", "source_audio")
+    # 1. Añadimos un nuevo "IMAGE" al final de las salidas
+    RETURN_TYPES = ("IMAGE", "INT", "AUDIO", "VHS_VIDEOINFO", "AUDIO", "IMAGE")
+    RETURN_NAMES = ("IMAGE", "frame_count", "audio", "video_info", "source_audio", "first_frame")
     FUNCTION = "load_video_with_audio"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
@@ -75,24 +63,19 @@ class LoadVideoWithSourceAudio:
     def load_video_with_audio(self, **kwargs):
         vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
         if not vhs_class:
-            raise Exception("❌ VideoHelperSuite no está instalado o cargado.")
+            raise Exception("❌ VideoHelperSuite no está instalado.")
 
         vhs_instance = vhs_class()
 
-        # 2. EL TRUCO MÁGICO: Preguntamos a VHS qué parámetros exactos acepta en esta versión
         vhs_inputs = vhs_class.INPUT_TYPES()
         allowed_keys = set()
         for cat in ["required", "optional", "hidden"]:
             if cat in vhs_inputs:
                 allowed_keys.update(vhs_inputs[cat].keys())
 
-        # 3. Filtramos los kwargs estrictamente por lo que VHS nos acaba de decir
         vhs_kwargs = {k: v for k, v in kwargs.items() if k in allowed_keys}
-
-        # 4. Ejecutamos VHS de forma segura
         vhs_output = vhs_instance.load_video(**vhs_kwargs)
 
-        # Extraemos retornos
         if isinstance(vhs_output, dict):
             res = list(vhs_output.get("result", []))
             ui = vhs_output.get("ui", {})
@@ -100,7 +83,7 @@ class LoadVideoWithSourceAudio:
             res = list(vhs_output)
             ui = {}
 
-        # 5. Extraer audio original
+        # 2. Extraer audio original
         raw_video = kwargs.get("video")
         video_name = raw_video[0] if isinstance(raw_video, (list, tuple)) else raw_video
         video_path = folder_paths.get_annotated_filepath(video_name) if video_name else ""
@@ -113,11 +96,19 @@ class LoadVideoWithSourceAudio:
         except Exception as e:
             print(f"⚠️ [LoadVideo] Error extrayendo source_audio: {e}")
 
-        # Añadimos la quinta salida (el source audio)
+        # 3. Extraer el primer frame del tensor de vídeo
+        first_frame = None
+        if len(res) > 0 and res[0] is not None:
+            # res[0] tiene forma (Lote, Alto, Ancho, Canales).
+            # [0:1] coge el primer elemento pero mantiene el formato (1, Alto, Ancho, Canales)
+            first_frame = res[0][0:1]
+
+        # 4. Construimos el paquete final de 6 salidas
         if len(res) >= 4:
-            res = [res[0], res[1], res[2], res[3], source_audio]
+            res = [res[0], res[1], res[2], res[3], source_audio, first_frame]
         else:
             res.append(source_audio)
+            res.append(first_frame)
 
         return {"ui": ui, "result": tuple(res)}
 
