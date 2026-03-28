@@ -185,16 +185,20 @@ class LoadVideoWithSourceAudio:
 
     @classmethod
     def IS_CHANGED(s, video, **kwargs):
-        vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
-        if vhs_class and hasattr(vhs_class, "IS_CHANGED"):
-            return vhs_class.IS_CHANGED(video, **kwargs)
+        # Lógica propia: Comprobamos si el vídeo ha cambiado usando su fecha de modificación en disco.
+        # Es mucho más rápido que calcular el hash SHA256 de un archivo de vídeo gigante.
+        video_path = folder_paths.get_annotated_filepath(video)
+        if os.path.exists(video_path):
+            return os.path.getmtime(video_path)
         return float("NaN")
 
     @classmethod
     def VALIDATE_INPUTS(s, video, **kwargs):
-        vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
-        if vhs_class and hasattr(vhs_class, "VALIDATE_INPUTS"):
-            return vhs_class.VALIDATE_INPUTS(video, **kwargs)
+        # Lógica propia: Comprobamos directamente si la ruta del archivo existe.
+        # Al aceptar **kwargs, absorbemos cualquier parámetro extra (como force_rate) sin que Python explote.
+        video_path = folder_paths.get_annotated_filepath(video)
+        if not os.path.exists(video_path):
+            return f"❌ El archivo de vídeo no existe en la ruta: {video_path}"
         return True
 
     def load_video_with_audio(self, **kwargs):
