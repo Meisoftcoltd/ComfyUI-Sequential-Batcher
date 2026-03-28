@@ -10,17 +10,31 @@ from . import register_node
 class WanFrameValidator:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"target_frames": ("INT", {"default": 49, "min": 1, "max": 10000})}}
-    RETURN_TYPES = ("INT",)
-    RETURN_NAMES = ("valid_frames",)
+        return {
+            "required": {
+                # target_frames se queda como un campo numérico en el nodo
+                "target_frames": ("INT", {"default": 49, "min": 1, "max": 10000}),
+                # current_loop_index se fuerza como un punto de conexión de entrada (cable)
+                "current_loop_index": ("INT", {"default": 0, "forceInput": True}),
+            }
+        }
+
+    RETURN_TYPES = ("INT", "INT")
+    RETURN_NAMES = ("valid_frames", "skip_frames")
     FUNCTION = "validate"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
-    def validate(self, target_frames):
+    def validate(self, target_frames, current_loop_index):
+        # 1. Validar la regla estricta de WanVideo (4k+1)
         k = (target_frames - 1) // 4
-        corrected_frames = (4 * k) + 1
-        print(f"🛡️ [Wan Validator] Fotogramas ajustados: {corrected_frames}")
-        return (max(1, corrected_frames), )
+        corrected_frames = max(1, (4 * k) + 1)
+
+        # 2. Calcular cuántos frames debe saltar el cargador en este ciclo
+        skip_frames = current_loop_index * corrected_frames
+
+        print(f"🛡️ [Wan Validator] Lote: {corrected_frames} frames | Saltar: {skip_frames} frames")
+
+        return (corrected_frames, skip_frames)
 
 @register_node
 class LoadVideoWithSourceAudio:
