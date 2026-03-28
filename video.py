@@ -41,7 +41,8 @@ class WanFrameValidator:
 
         return (corrected_frames, )
 
-session_video_list = []
+import gc
+import torch
 
 @register_node
 class IncrementalVideoStitcher:
@@ -49,121 +50,165 @@ class IncrementalVideoStitcher:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "trigger": ("VHS_FILENAMES", ),
+                "images": ("IMAGE", ),
                 "output_prefix": ("STRING", {"default": "SCAIL_Final"}),
                 "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000}),
+                "total_loops": ("INT", {"default": 1, "min": 1, "max": 10000}),
             },
             "optional": {
-                "audio": ("AUDIO", ), # Nueva entrada de audio opcional
+                "audio": ("AUDIO", ),
             }
         }
 
-    RETURN_TYPES = ("STRING", )
-    RETURN_NAMES = ("final_video_path", )
+    RETURN_TYPES = ("IMAGE", "AUDIO")
+    RETURN_NAMES = ("ALL_IMAGES", "AUDIO_OUT")
     OUTPUT_NODE = True
-    INPUT_IS_LIST = True
     FUNCTION = "stitch_incremental"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
-    def stitch_incremental(self, trigger, output_prefix, current_loop_index, audio=None):
-        if not trigger or trigger[0] is None:
-            raise ValueError("❌ ERROR CRÍTICO: El nodo 'Incremental Auto-Stitcher' no recibe archivos de vídeo. Conecta la salida 'filenames' de tu Video Combine.")
+    def stitch_incremental(self, images, output_prefix, current_loop_index, total_loops, audio=None):
+        if images is None:
+            raise ValueError("❌ ERROR CRÍTICO: El nodo 'Incremental Auto-Stitcher' necesita el cable de 'images' con los tensores.")
 
-        if not current_loop_index or current_loop_index[0] is None:
-            raise ValueError("❌ ERROR CRÍTICO: El nodo 'Incremental Auto-Stitcher' necesita el cable de 'current_loop_index' para gestionar la sesión.")
+        if current_loop_index is None or total_loops is None:
+            raise ValueError("❌ ERROR CRÍTICO: El nodo 'Incremental Auto-Stitcher' necesita 'current_loop_index' y 'total_loops'.")
 
-        global session_video_list
+        # Barrera de seguridad para evitar que un string vacío borre el directorio principal
+        if not output_prefix or not output_prefix.strip():
+            output_prefix = "SCAIL_Final"
 
         out_dir = folder_paths.get_output_directory()
-        prefix = output_prefix[0] if isinstance(output_prefix, list) else output_prefix
-        loop_idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
+        # Creamos una subcarpeta usando el output_prefix
+        stitch_dir = os.path.join(out_dir, output_prefix)
+        os.makedirs(stitch_dir, exist_ok=True)
 
         print(f"\n{'='*50}")
         print(f"🎞️ [DEBUG] NODO: Incremental Auto-Stitcher")
-        print(f"   -> Ciclo actual: {loop_idx} | Prefix: {prefix}")
+        print(f"   -> Ciclo actual: {current_loop_index} / Total: {total_loops} | Prefix: {output_prefix}")
 
-        if loop_idx == 0:
-            print(f"   -> 🧹 Limpiando lista de vídeos de sesiones anteriores.")
-            session_video_list.clear()
+        # Ciclo 0: Limpieza
+        if current_loop_index == 0:
+            print(f"   -> 🧹 Limpiando archivos de tensores de sesiones anteriores en: {stitch_dir}")
+            pt_files = glob.glob(os.path.join(stitch_dir, "*.pt"))
+            for pt_file in pt_files:
+                try:
+                    os.remove(pt_file)
+                except Exception as e:
+                    print(f"   -> ❌ Error borrando {pt_file}: {e}")
 
-        current_mp4s = []
-        def extract_mp4s(data):
-            if isinstance(data, str) and data.endswith(".mp4"):
-                current_mp4s.append(data)
-            elif isinstance(data, (list, tuple)):
-                for item in data: extract_mp4s(item)
-            elif isinstance(data, dict):
-                for item in data.values(): extract_mp4s(item)
-        extract_mp4s(trigger)
+        # Guardar tensor a disco para liberar RAM/VRAM
+        pt_filename = f"batch_{current_loop_index:04d}.pt"
+        pt_path = os.path.join(stitch_dir, pt_filename)
 
-        for v in current_mp4s:
-            abs_path = v if os.path.isabs(v) else os.path.join(out_dir, v)
-            if abs_path not in session_video_list and os.path.exists(abs_path):
-                session_video_list.append(abs_path)
-                print(f"   -> ➕ Añadido al ensamblaje: {os.path.basename(abs_path)}")
+        print(f"   -> 💾 Descargando tensores a la CPU y guardando en: {pt_filename}")
+        cpu_images = images.cpu()
+        torch.save(cpu_images, pt_path)
 
-        print(f"   -> 📦 Total de vídeos a ensamblar: {len(session_video_list)}")
+        # Limpieza manual de memoria
+        del images
+        del cpu_images
+        gc.collect()
 
-        if not session_video_list:
+        # Comprobamos si es el último ciclo
+        if current_loop_index < (total_loops - 1):
+            print(f"   -> ⏳ Bucle en proceso. Retornando tensor vacío para ahorrar RAM.")
             print(f"{'='*50}\n")
-            return ("", )
+            # Devolvemos un tensor vacío y None para el audio
+            dummy_tensor = torch.zeros((1, 16, 16, 3))
+            return (dummy_tensor, None)
 
-        list_file_path = os.path.join(out_dir, "batch_concat_list.txt")
-        out_name = f"{prefix}_{loop_idx:04d}.mp4"
-        temp_concat = os.path.join(out_dir, f"temp_concat_video_{loop_idx:04d}.mp4")
-        final_output = os.path.join(out_dir, out_name)
+        elif current_loop_index == (total_loops - 1):
+            print(f"   -> 🏁 Último ciclo alcanzado. Ensamblando tensores finales...")
+            pt_files = sorted(glob.glob(os.path.join(stitch_dir, "*.pt")))
+            tensor_list = []
 
-        try:
-            with open(list_file_path, 'w', encoding='utf-8') as f:
-                for video in session_video_list: f.write(f"file '{video}'\n")
+            for pt_file in pt_files:
+                try:
+                    loaded_tensor = torch.load(pt_file)
+                    tensor_list.append(loaded_tensor)
+                    print(f"   -> 📦 Cargado: {os.path.basename(pt_file)}")
+                except Exception as e:
+                    print(f"   -> ❌ Error cargando {pt_file}: {e}")
 
-            # Paso 1: Ensamblar los vídeos de forma silenciosa
-            ffmpeg_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file_path, "-c", "copy", temp_concat]
-            subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if not tensor_list:
+                print(f"   -> ⚠️ No se encontraron tensores guardados para ensamblar.")
+                print(f"{'='*50}\n")
+                dummy_tensor = torch.zeros((1, 16, 16, 3))
+                return (dummy_tensor, audio)
 
-            # Paso 2: Procesar e inyectar el Audio (si existe)
-            has_audio = audio is not None and isinstance(audio, list) and len(audio) > 0 and audio[0] is not None
-            if has_audio:
-                print(f"   -> 🎵 Audio detectado. Sincronizando y multiplexando...")
+            # Unir todos los tensores
+            print(f"   -> 🧩 Concatenando {len(tensor_list)} tensores...")
+            final_images = torch.cat(tensor_list, dim=0)
 
-                audio_data = audio[0]
-                waveform = audio_data.get("waveform")
-                sample_rate = audio_data.get("sample_rate", 44100)
+            # (Opcional) Borrar la subcarpeta para ahorrar espacio
+            print(f"   -> 🧹 Limpiando subcarpeta temporal: {stitch_dir}")
+            try:
+                shutil.rmtree(stitch_dir)
+            except Exception as e:
+                print(f"   -> ❌ Error borrando subcarpeta: {e}")
 
-                if waveform is not None:
-                    # ComfyUI a veces envía el tensor como [Batch, Canales, Muestras]. Lo pasamos a [Canales, Muestras]
-                    if waveform.dim() == 3:
-                        waveform = waveform.squeeze(0)
-
-                    temp_audio_path = os.path.join(out_dir, f"temp_audio_{loop_idx:04d}.wav")
-                    torchaudio.save(temp_audio_path, waveform, sample_rate)
-
-                    # Multiplexamos usando -shortest para que el audio se corte donde termina el vídeo
-                    ffmpeg_mux_cmd = [
-                        "ffmpeg", "-y",
-                        "-i", temp_concat,
-                        "-i", temp_audio_path,
-                        "-c:v", "copy",
-                        "-c:a", "aac", "-b:a", "192k",
-                        "-shortest", final_output
-                    ]
-                    subprocess.run(ffmpeg_mux_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-                    if os.path.exists(temp_audio_path): os.remove(temp_audio_path)
-                    if os.path.exists(temp_concat): os.remove(temp_concat)
-                    print(f"   -> ✅ Ensamblaje progresivo CON AUDIO exitoso: {out_name}")
-                else:
-                    shutil.move(temp_concat, final_output)
-                    print(f"   -> ⚠️ Audio detectado pero sin waveform. Ensamblaje sin audio: {out_name}")
+            print(f"   -> ✅ Ensamblaje exitoso. Retornando tensor gigante: {list(final_images.shape)}")
+            if audio is not None:
+                print(f"   -> 🎵 Retornando audio ('passthrough').")
             else:
-                # Si no hay audio conectado, simplemente renombramos el archivo temporal
-                shutil.move(temp_concat, final_output)
-                print(f"   -> ✅ Ensamblaje progresivo exitoso (Mudo): {out_name}")
+                print(f"   -> 🔇 No se detectó audio ('passthrough' vacío).")
+            print(f"{'='*50}\n")
 
+            return (final_images, audio)
+
+import nodes
+
+@register_node
+class LoadVideoWithSourceAudio:
+    @classmethod
+    def INPUT_TYPES(s):
+        # Clonar los inputs dinámicamente si VHS está instalado
+        vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
+        if vhs_class:
+            return vhs_class.INPUT_TYPES()
+        else:
+            raise Exception("❌ VHS_LoadVideo no encontrado. Instala VideoHelperSuite.")
+
+    RETURN_TYPES = ("IMAGE", "INT", "AUDIO", "VHS_VIDEOINFO", "AUDIO")
+    RETURN_NAMES = ("IMAGE", "frame_count", "audio", "video_info", "source_audio")
+    FUNCTION = "load_video_with_audio"
+    CATEGORY = "🔁 Sequential Batcher/Video"
+
+    # Intentamos mantener el Display Name para la interfaz web a través del Custom Node mapping original de ComfyUI (opcional pero util para que se llame diferente a VHS)
+    # Normalmente esto se hace en el NODE_DISPLAY_NAME_MAPPINGS global de __init__.py pero la clase será LoadVideoWithSourceAudio
+
+    def load_video_with_audio(self, **kwargs):
+        vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
+        if not vhs_class:
+            raise Exception("❌ VHS_LoadVideo no encontrado.")
+
+        print(f"\n{'='*50}")
+        print(f"🎥 [DEBUG] NODO: Load Video + Source Audio")
+
+        # 1. Instanciar el nodo original y ejecutar su lógica
+        print(f"   -> Ejecutando lógica original de VHS...")
+        vhs_instance = vhs_class()
+        vhs_result = vhs_instance.load_video(**kwargs)
+
+        # vhs_result contiene: (IMAGE, frame_count, audio, video_info)
+
+        # 2. Lógica nueva: Extraer el audio completo del archivo fuente
+        video_filename = kwargs.get("video")
+        # El nombre del archivo puede venir como una ruta completa desde input, o desde un subdirectorio.
+        # En VHS y ComfyUI, usan get_annotated_filepath (esto lo traemos si hace falta, o simplemente path del input dir)
+        # VHS lo carga así:
+        video_path = folder_paths.get_annotated_filepath(video_filename)
+
+        print(f"   -> 🎵 Extrayendo pista de audio completa (sin cortes) desde: {video_path}")
+        try:
+            waveform, sample_rate = torchaudio.load(video_path)
+            # Retornamos el diccionario en el formato estándar AUDIO de ComfyUI
+            source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
+            print(f"   -> ✅ Audio extraído con éxito. Muestreo: {sample_rate}Hz")
         except Exception as e:
-            print(f"   -> ❌ Error FFmpeg: {e}")
-        finally:
-            if os.path.exists(list_file_path): os.remove(list_file_path)
+            print(f"   -> ⚠️ Error cargando audio fuente: {e}")
+            source_audio = None
 
         print(f"{'='*50}\n")
-        return (final_output, )
+        # 3. Devolver el resultado original + nuestro audio completo en el 5º puerto
+        return (vhs_result[0], vhs_result[1], vhs_result[2], vhs_result[3], source_audio)

@@ -27,15 +27,17 @@ The system is built around three major categories:
 
 ### 🎞️ Video (Assembly and Validation)
 5. **🛡️ Wan Frame Validator (`WanFrameValidator`)**: Validates and corrects the target number of frames to ensure they fit the `4k+1` formula required by specific models (e.g., Wan).
-6. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Sequentially assembles the generated video chunks using FFmpeg.
-   - **📦 Progressive History (New in v1.1.0!):** No longer overwrites the previous video. It now saves cumulative MP4s (`SCAIL_Final_0001.mp4`, `SCAIL_Final_0002.mp4`), protecting your work from server crashes.
-   - **🎵 Audio Multiplexing (New in v1.1.0!):** Accepts a standard `AUDIO` input. Captures the sound with `torchaudio` and employs FFmpeg's `-shortest` command. This ensures the audio synchronizes perfectly and cuts exactly to the duration of the current cycle's assembly.
+6. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Progressively archives generated tensors directly to the hard drive and safely assembles them at the end of all cycles.
+   - **🧠 Zero OOM (New!):** Replaces RAM accumulation with progressive temporary disk saves (`.pt`), clearing system memory immediately to enable infinite video processing without crashing the system.
+   - **🎵 Audio Passthrough (New!):** Feeds the original pure audio straight to the assembled output during the final loop iteration.
+7. **🎥 Load Video + Source Audio (`LoadVideoWithSourceAudio`)**: (New!) Functions exactly like the standard VHS video loader, but extracts and safely exposes the **complete**, uncropped original audio track to ensure it travels unaltered throughout the sequential process.
 
 ## Setup & Usage
 
 ### Prerequisites
-- **FFmpeg**: Must be installed and available in your system's PATH for the `Incremental Auto-Stitcher` to function correctly.
-- **Torchaudio**: (Usually included in ComfyUI environments) is required to extract the audio track before multiplexing.
+- **VideoHelperSuite (VHS)**: Dynamically required for the `Load Video + Source Audio` node to function and replicate its UI seamlessly.
+- **FFmpeg**: Must be installed and available in your system's PATH to manage underlying video operations.
+- **Torchaudio**: (Usually included in ComfyUI environments) is required to extract the original pure audio track from the source.
 
 ### Installation
 1. Navigate to your ComfyUI `custom_nodes` folder.

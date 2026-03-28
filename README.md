@@ -27,15 +27,17 @@ El sistema se construye alrededor de tres categorías principales:
 
 ### 🎞️ Video (Ensamblaje y Validación)
 5. **🛡️ Wan Frame Validator (`WanFrameValidator`)**: Valida y corrige el número objetivo de fotogramas para asegurar que encajen en la fórmula `4k+1` requerida por modelos específicos (ej. Wan).
-6. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Ensambla secuencialmente los fragmentos de vídeo generados usando FFmpeg.
-   - **📦 Historial Progresivo (¡Nuevo en v1.1.0!):** Ya no sobrescribe el vídeo anterior. Ahora guarda MP4s acumulativos (`SCAIL_Final_0001.mp4`, `SCAIL_Final_0002.mp4`), protegiendo tu trabajo de cuelgues del servidor.
-   - **🎵 Multiplexado de Audio (¡Nuevo en v1.1.0!):** Acepta una entrada estándar `AUDIO`. Captura el sonido con `torchaudio` y emplea el comando `-shortest` de FFmpeg. Esto hace que el audio se sincronice a la perfección y se corte exactamente a la duración del ensamblaje del ciclo actual.
+6. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Archiva progresivamente los tensores generados en el disco duro y los ensambla de forma segura al final de todos los ciclos.
+   - **🧠 Cero OOM (¡Nuevo!):** Sustituye las acumulaciones en memoria por guardados temporales en disco (`.pt`), borrando la RAM de inmediato para poder procesar vídeos infinitos sin colapsar el sistema.
+   - **🎵 Passthrough de Audio (¡Nuevo!):** Alimenta directamente el audio original hacia el archivo ensamblado en el último ciclo.
+7. **🎥 Load Video + Source Audio (`LoadVideoWithSourceAudio`)**: (¡Nuevo!) Funciona exactamente igual que un cargador de vídeo de VHS, pero extrae y expone de manera segura la pista de audio original **completa** y sin recortes para asegurar que viaja inalterada a lo largo del proceso secuencial.
 
 ## Configuración y Uso
 
 ### Prerrequisitos
-- **FFmpeg**: Debe estar instalado y disponible en el PATH del sistema para que el `Incremental Auto-Stitcher` funcione correctamente.
-- **Torchaudio**: (Generalmente incluido en los entornos ComfyUI) es necesario para extraer la pista de audio antes del multiplexado.
+- **VideoHelperSuite (VHS)**: Requerido de forma dinámica para que el nodo `Load Video + Source Audio` funcione y replique su interfaz de manera correcta.
+- **FFmpeg**: Debe estar instalado y disponible en el PATH del sistema para manejar procesos subyacentes de vídeo.
+- **Torchaudio**: (Generalmente incluido en los entornos ComfyUI) es necesario para extraer la pista de audio fuente original de forma pura.
 
 ### Instalación
 1. Ve a la carpeta `custom_nodes` de ComfyUI.
