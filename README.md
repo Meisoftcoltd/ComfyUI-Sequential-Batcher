@@ -28,9 +28,9 @@ El sistema se construye alrededor de tres categorías principales:
 ### 🎞️ Video (Ensamblaje y Validación)
 5. **🛡️ Wan Frame Validator (`WanFrameValidator`)**: Valida y corrige el número objetivo de fotogramas para asegurar que encajen en la fórmula `4k+1` requerida por modelos específicos (ej. Wan).
 6. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Archiva progresivamente los tensores generados en el disco duro y los ensambla de forma segura al final de todos los ciclos.
-   - **🧠 Cero OOM (¡Nuevo!):** Sustituye las acumulaciones en memoria por guardados temporales en disco (`.pt`), borrando la RAM de inmediato para poder procesar vídeos infinitos sin colapsar el sistema.
-   - **🎵 Passthrough de Audio (¡Nuevo!):** Alimenta directamente el audio original hacia el archivo ensamblado en el último ciclo.
-7. **🎥 Load Video + Source Audio (`LoadVideoWithSourceAudio`)**: (¡Nuevo!) Funciona exactamente igual que un cargador de vídeo de VHS, pero extrae y expone de manera segura la pista de audio original **completa** y sin recortes para asegurar que viaja inalterada a lo largo del proceso secuencial.
+   - **🧠 Cero OOM (¡Nuevo!):** Sustituye las acumulaciones en memoria por guardados temporales en disco (`.pt`), borrando la RAM de inmediato para poder procesar vídeos infinitos sin colapsar el sistema. Al desactivar `INPUT_IS_LIST`, maneja tensores puros eficientemente.
+   - **🎵 Passthrough de Audio (¡Nuevo!):** Alimenta directamente el audio original hacia el archivo ensamblado en el último ciclo (devolviendo `None` en los ciclos intermedios para ahorrar recursos).
+7. **🎥 Load Video + Source Audio (`LoadVideoWithSourceAudio`)**: (¡Nuevo!) Funciona exactamente igual que un cargador de vídeo de VHS (incluyendo la vista previa en la UI y el botón de subida), pero extrae y expone de manera segura la pista de audio original **completa** y sin recortes para asegurar que viaja inalterada a lo largo del proceso secuencial.
 
 ## Configuración y Uso
 
