@@ -13,7 +13,8 @@ class SequentialLoopStart:
         return {
             "required": {
                 "reset_loop": ("BOOLEAN", {"default": False}),
-                "loop_idx": ("INT", {"default": 0, "min": 0, "max": 10000}), # Inyectado por el Trigger
+                "loop_idx": ("INT", {"default": 0, "min": 0, "max": 10000}),
+                "total_loops": ("INT", {"default": 1, "min": 1, "max": 10000}),
             }
         }
 
@@ -26,12 +27,12 @@ class SequentialLoopStart:
     def IS_CHANGED(cls, **kwargs):
         return time.time()
 
-    def get_index(self, reset_loop, loop_idx):
+    def get_index(self, reset_loop, loop_idx, total_loops):
         global global_loop_index
 
         print(f"\n{'='*50}")
         print(f"🚀 [DEBUG] NODO: Loop Start")
-        print(f"   -> Input loop_idx (UI/Trigger): {loop_idx}")
+        print(f"   -> Input loop_idx (UI/Trigger): {loop_idx} / {total_loops - 1} (Total: {total_loops})")
         print(f"   -> Input reset_loop: {reset_loop}")
 
         is_reset = str(reset_loop).lower() in ['true', '1', 't', 'y']
@@ -44,7 +45,7 @@ class SequentialLoopStart:
         print(f"   -> 📤 OUTPUT current_loop_index: {global_loop_index}")
         print(f"{'='*50}\n")
 
-        return (global_loop_index, )
+        return (global_loop_index,)
 
 @register_node
 class SequentialLoopTrigger:
