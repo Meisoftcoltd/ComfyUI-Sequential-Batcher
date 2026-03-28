@@ -60,6 +60,7 @@ class IncrementalVideoStitcher:
             }
         }
 
+    INPUT_IS_LIST = False
     RETURN_TYPES = ("IMAGE", "AUDIO")
     RETURN_NAMES = ("ALL_IMAGES", "AUDIO_OUT")
     OUTPUT_NODE = True
@@ -162,53 +163,69 @@ import nodes
 class LoadVideoWithSourceAudio:
     @classmethod
     def INPUT_TYPES(s):
-        # Clonar los inputs dinámicamente si VHS está instalado
         vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
         if vhs_class:
-            return vhs_class.INPUT_TYPES()
+            inputs = vhs_class.INPUT_TYPES()
+            # Forzar la aparición del botón de subida ("Upload")
+            if "video" in inputs["required"]:
+                video_tuple = list(inputs["required"]["video"])
+                if len(video_tuple) > 1 and isinstance(video_tuple[1], dict):
+                    video_tuple[1]["video_upload"] = True
+                else:
+                    video_tuple = (video_tuple[0], {"video_upload": True})
+                inputs["required"]["video"] = tuple(video_tuple)
+            return inputs
         else:
-            raise Exception("❌ VHS_LoadVideo no encontrado. Instala VideoHelperSuite.")
+            raise Exception("VHS_LoadVideo no encontrado. Instala VideoHelperSuite.")
 
     RETURN_TYPES = ("IMAGE", "INT", "AUDIO", "VHS_VIDEOINFO", "AUDIO")
     RETURN_NAMES = ("IMAGE", "frame_count", "audio", "video_info", "source_audio")
-    FUNCTION = "load_video_with_audio"
     CATEGORY = "🔁 Sequential Batcher/Video"
+    FUNCTION = "load_video_with_audio"
 
-    # Intentamos mantener el Display Name para la interfaz web a través del Custom Node mapping original de ComfyUI (opcional pero util para que se llame diferente a VHS)
-    # Normalmente esto se hace en el NODE_DISPLAY_NAME_MAPPINGS global de __init__.py pero la clase será LoadVideoWithSourceAudio
+    @classmethod
+    def IS_CHANGED(s, video, **kwargs):
+        vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
+        if vhs_class and hasattr(vhs_class, "IS_CHANGED"):
+            return vhs_class.IS_CHANGED(video, **kwargs)
+        return float("NaN")
+
+    @classmethod
+    def VALIDATE_INPUTS(s, video, **kwargs):
+        vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
+        if vhs_class and hasattr(vhs_class, "VALIDATE_INPUTS"):
+            return vhs_class.VALIDATE_INPUTS(video, **kwargs)
+        return True
 
     def load_video_with_audio(self, **kwargs):
         vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
-        if not vhs_class:
-            raise Exception("❌ VHS_LoadVideo no encontrado.")
 
-        print(f"\n{'='*50}")
-        print(f"🎥 [DEBUG] NODO: Load Video + Source Audio")
-
-        # 1. Instanciar el nodo original y ejecutar su lógica
-        print(f"   -> Ejecutando lógica original de VHS...")
+        # 1. Ejecutar el nodo VHS original
         vhs_instance = vhs_class()
-        vhs_result = vhs_instance.load_video(**kwargs)
+        vhs_output = vhs_instance.load_video(**kwargs)
 
-        # vhs_result contiene: (IMAGE, frame_count, audio, video_info)
+        # 2. Recuperar la interfaz (Preview UI) y los resultados
+        if isinstance(vhs_output, dict) and "result" in vhs_output:
+            res = vhs_output["result"]
+            ui = vhs_output.get("ui", {})
+        else:
+            res = vhs_output
+            ui = {}
 
-        # 2. Lógica nueva: Extraer el audio completo del archivo fuente
-        video_filename = kwargs.get("video")
-        # El nombre del archivo puede venir como una ruta completa desde input, o desde un subdirectorio.
-        # En VHS y ComfyUI, usan get_annotated_filepath (esto lo traemos si hace falta, o simplemente path del input dir)
-        # VHS lo carga así:
-        video_path = folder_paths.get_annotated_filepath(video_filename)
+        # 3. Extraer el audio original completo
+        video_name = kwargs.get("video")
+        video_path = folder_paths.get_annotated_filepath(video_name)
 
-        print(f"   -> 🎵 Extrayendo pista de audio completa (sin cortes) desde: {video_path}")
+        source_audio = None
         try:
-            waveform, sample_rate = torchaudio.load(video_path)
-            # Retornamos el diccionario en el formato estándar AUDIO de ComfyUI
-            source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
-            print(f"   -> ✅ Audio extraído con éxito. Muestreo: {sample_rate}Hz")
+            if os.path.exists(video_path):
+                waveform, sample_rate = torchaudio.load(video_path)
+                source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
         except Exception as e:
-            print(f"   -> ⚠️ Error cargando audio fuente: {e}")
-            source_audio = None
+            print(f"⚠️ [LoadVideo] Error cargando source_audio: {e}")
 
-        print(f"{'='*50}\n")
-        # 3. Devolver el resultado original + nuestro audio completo en el 5º puerto
-        return (vhs_result[0], vhs_result[1], vhs_result[2], vhs_result[3], source_audio)
+        # 4. Retornar el diccionario con la UI intacta (restaura el reproductor visual)
+        return {
+            "ui": ui,
+            "result": (res[0], res[1], res[2], res[3], source_audio)
+        }

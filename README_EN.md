@@ -28,9 +28,9 @@ The system is built around three major categories:
 ### 🎞️ Video (Assembly and Validation)
 5. **🛡️ Wan Frame Validator (`WanFrameValidator`)**: Validates and corrects the target number of frames to ensure they fit the `4k+1` formula required by specific models (e.g., Wan).
 6. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Progressively archives generated tensors directly to the hard drive and safely assembles them at the end of all cycles.
-   - **🧠 Zero OOM (New!):** Replaces RAM accumulation with progressive temporary disk saves (`.pt`), clearing system memory immediately to enable infinite video processing without crashing the system.
-   - **🎵 Audio Passthrough (New!):** Feeds the original pure audio straight to the assembled output during the final loop iteration.
-7. **🎥 Load Video + Source Audio (`LoadVideoWithSourceAudio`)**: (New!) Functions exactly like the standard VHS video loader, but extracts and safely exposes the **complete**, uncropped original audio track to ensure it travels unaltered throughout the sequential process.
+   - **🧠 Zero OOM (New!):** Replaces RAM accumulation with progressive temporary disk saves (`.pt`), clearing system memory immediately to enable infinite video processing without crashing the system. By disabling `INPUT_IS_LIST`, it handles raw tensors efficiently.
+   - **🎵 Audio Passthrough (New!):** Feeds the original pure audio straight to the assembled output during the final loop iteration (returning `None` during intermediate loops to save resources).
+7. **🎥 Load Video + Source Audio (`LoadVideoWithSourceAudio`)**: (New!) Functions exactly like the standard VHS video loader (including UI preview widget and upload button), but extracts and safely exposes the **complete**, uncropped original audio track to ensure it travels unaltered throughout the sequential process.
 
 ## Setup & Usage
 
