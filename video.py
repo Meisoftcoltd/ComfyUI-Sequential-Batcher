@@ -185,8 +185,7 @@ class LoadVideoWithSourceAudio:
 
     @classmethod
     def IS_CHANGED(s, video, **kwargs):
-        # Lógica propia: Comprobamos si el vídeo ha cambiado usando su fecha de modificación en disco.
-        # Es mucho más rápido que calcular el hash SHA256 de un archivo de vídeo gigante.
+        # Usamos la fecha de modificación del archivo nativamente
         video_path = folder_paths.get_annotated_filepath(video)
         if os.path.exists(video_path):
             return os.path.getmtime(video_path)
@@ -194,8 +193,7 @@ class LoadVideoWithSourceAudio:
 
     @classmethod
     def VALIDATE_INPUTS(s, video, **kwargs):
-        # Lógica propia: Comprobamos directamente si la ruta del archivo existe.
-        # Al aceptar **kwargs, absorbemos cualquier parámetro extra (como force_rate) sin que Python explote.
+        # Absorbemos los **kwargs sin pasarlos a VHS y validamos la ruta
         video_path = folder_paths.get_annotated_filepath(video)
         if not os.path.exists(video_path):
             return f"❌ El archivo de vídeo no existe en la ruta: {video_path}"
@@ -206,7 +204,12 @@ class LoadVideoWithSourceAudio:
 
         # 1. Ejecutar el nodo VHS original
         vhs_instance = vhs_class()
-        vhs_output = vhs_instance.load_video(**kwargs)
+
+        # Filtramos kwargs para que VHS no explote si recibe parámetros extra
+        vhs_fields = ["video", "force_rate", "custom_width", "custom_height", "frame_load_cap", "skip_first_frames", "select_every_nth", "meta_batch", "vae", "format"]
+        vhs_kwargs = {k: v for k, v in kwargs.items() if k in vhs_fields}
+
+        vhs_output = vhs_instance.load_video(**vhs_kwargs)
 
         # 2. Recuperar la interfaz (Preview UI) y los resultados
         if isinstance(vhs_output, dict) and "result" in vhs_output:
