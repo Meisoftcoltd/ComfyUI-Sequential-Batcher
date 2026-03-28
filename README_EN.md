@@ -15,22 +15,22 @@ In **v1.1.0**, we have introduced progressive disk saving capabilities, audio mu
 The system is built around three major categories:
 
 ### 🔁 Loop (Autonomous Orchestration)
-1. **🏁 Loop Start (Index) (`SequentialLoopStart`)**: Initiates the loop, manages the global loop index, and provides the current iteration index to downstream nodes.
+1. **🏁 Loop Start (Index) (`SequentialLoopStart`)**: Initiates the loop, manages the global loop index, and provides the current iteration index to downstream nodes. It now also accepts a `total_loops` parameter to display detailed progress tracking (`Cycle X / Y`) in the console.
 2. **🚀 Loop Trigger (Auto-Queue) (`SequentialLoopTrigger`)**: Placed at the very end of your workflow. It increments the loop counter and autonomously triggers an HTTP POST request to the ComfyUI API (`/prompt`) to queue the next batch cycle.
    - **Seed Mutator:** Scans the canvas, locates nodes with a seed (`seed` or `noise_seed`), and injects a new 32-bit random seed, breaking forward cache in samplers.
    - **💉 Anti-Cache Injection (New in v1.1.0!):** Specifically searches for the `Loop Start` node within the JSON payload and **forcefully injects the new index**. This shatters ComfyUI's infamous "reverse cache" (bottom-up) that froze initial nodes during Auto-Queue, guaranteeing uninterrupted progression.
 
 ### 🖼️ Image (Session Memory)
-3. **📥 Session Image Receiver (`SessionImageReceiver`)**: Retrieves the initial image or the last generated frame from the previous cycle, intelligently detecting the start of a RAM session.
-4. **📤 Session Image Sender (`SessionImageSender`)**: Extracts the final image of a batch and secures it in system memory for the next cycle.
+3. **📥 Session Image Receiver (`SessionImageReceiver`)**: Retrieves the initial image or the last generated frame from the previous cycle, intelligently detecting the start of a RAM session. Like the loop start node, it now monitors and prints the total progress (`total_loops`).
+4. **📤 Session Image Sender (`SessionImageSender`)**: Extracts the final image of a batch and secures it in system memory for the next cycle. It also reports the current state relative to the total loops in the console.
    - **💾 Keyframe Dumping (New in v1.1.0!):** Now receives the current index and performs a safety dump to the hard drive, progressively saving `keyframe_XXX.png` every cycle to prevent data loss.
 
 ### 🎞️ Video (Assembly and Validation)
-5. **🛡️ Wan Frame Validator (`WanFrameValidator`)**: Validates and corrects the target number of frames to ensure they fit the `4k+1` formula required by specific models (e.g., Wan).
+5. **🛡️ Wan Frame Validator (`WanFrameValidator`)**: Validates and corrects the target number of frames to ensure they fit the `4k+1` formula required by specific models (e.g., Wan). Through the required `current_loop_index` input, it automatically calculates and outputs how many frames (`skip_frames`) the video loader should skip per iteration.
 6. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Progressively archives generated tensors directly to the hard drive and safely assembles them at the end of all cycles.
    - **🧠 Zero OOM (New!):** Replaces RAM accumulation with progressive temporary disk saves (`.pt`), clearing system memory immediately to enable infinite video processing without crashing the system. By disabling `INPUT_IS_LIST`, it handles raw tensors efficiently.
    - **🎵 Audio Passthrough (New!):** Feeds the original pure audio straight to the assembled output during the final loop iteration (returning `None` during intermediate loops to save resources).
-7. **🎥 Load Video + Source Audio (`LoadVideoWithSourceAudio`)**: (New!) This node **inherits directly from the original VHS class (`VHS_LoadVideo`)**. It functions exactly the same (including validations, UI preview widget, and upload button), but extracts and safely exposes the **complete**, uncropped original audio track to ensure it travels unaltered throughout the sequential process.
+7. **🎥 Load Video + Source Audio (`LoadVideoWithSourceAudio`)**: (New!) Using a Lazy Evaluation Wrapper, this node dynamically extracts the parameters from the original VHS class (`VHS_LoadVideo`) to avoid initial load failures. It functions exactly the same, but safely extracts and exposes the **complete** original audio track alongside the **first frame** (`first_frame`) as a separate output.
 
 ## Setup & Usage
 
