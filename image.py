@@ -26,7 +26,6 @@ class SessionImageReceiver:
             "required": {
                 "initial_image": ("IMAGE",),
                 "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000}),
-                "total_loops": ("INT", {"default": 1, "min": 1, "max": 10000}),
             },
         }
 
@@ -40,7 +39,10 @@ class SessionImageReceiver:
     def IS_CHANGED(cls, **kwargs):
         return time.time()
 
-    def get_image(self, initial_image, current_loop_index, total_loops):
+    def get_image(self, initial_image, current_loop_index):
+        from . import loop
+        total_loops = loop.global_total_loops
+
         global global_session_image
         loop_idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
         is_first = (loop_idx == 0)
@@ -71,7 +73,6 @@ class SessionImageSender:
             "required": {
                 "generated_images": ("IMAGE",),
                 "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000}),
-                "total_loops": ("INT", {"default": 1, "min": 1, "max": 10000}),
             },
         }
 
@@ -85,7 +86,10 @@ class SessionImageSender:
     def IS_CHANGED(cls, **kwargs):
         return time.time()
 
-    def set_image(self, generated_images, current_loop_index, total_loops):
+    def set_image(self, generated_images, current_loop_index):
+        from . import loop
+        total_loops = loop.global_total_loops
+
         if generated_images is None:
             raise ValueError("❌ ERROR CRÍTICO: El nodo 'Session Image Sender' no está recibiendo imágenes. Conecta la salida de tu VAE Decode o Sampler.")
 
