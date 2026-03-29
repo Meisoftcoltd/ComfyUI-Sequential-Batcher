@@ -1,4 +1,4 @@
-# ComfyUI Sequential Batcher (v1.3.0)
+# ComfyUI Sequential Batcher (v1.3.1)
 
 A highly specialized suite of custom nodes for ComfyUI designed for **Recursive Self-Queuing** and autonomous sequential processing. This architecture minimizes VRAM usage by processing heavy tasks (like video generation) sequentially, batch-by-batch, orchestrated entirely from within the graph.
 
@@ -8,7 +8,7 @@ A highly specialized suite of custom nodes for ComfyUI designed for **Recursive 
 
 Starting with v1.0.0, this repository has pivoted exclusively to the autonomous sequential loops and global memory architecture. All legacy technical debt (deprecated batch/sequence/debug nodes) has been pruned, leaving a clean, highly maintainable codebase focused on 6 core nodes.
 
-In **v1.3.0**, we implemented the **"Proportional Brain"**. We've eliminated circular dependency cables (like `total_loops`) using global ghost variables, and added a mathematical calculator to perfectly distribute video batches without dropping frames, supporting framerate striding via `select_every_nth`.
+In **v1.3.1**, we implemented the **"Explorer Cycle 0"**. We eliminated the external dependency on the total original frame count in the calculator by adopting a "Lazy Evaluation". In Cycle 0, the calculator blindly fires the user's intended target, while the video loader dynamically intercepts the true frame count directly from the VHS payload, dynamically calculating the total required loops for the rest of the generation. This removes unnecessary metadata nodes and keeps JSON layouts perfectly clean for n8n API integrations.
 
 ## The 6 Core Nodes
 
@@ -26,7 +26,7 @@ The system is built around three major categories:
    - **💾 Keyframe Dumping (New in v1.1.0!):** Now receives the current index and performs a safety dump to the hard drive, progressively saving `keyframe_XXX.png` every cycle to prevent data loss.
 
 ### 🎞️ Video (Assembly and Validation)
-5. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: The mandatory "Brain" of the machine. It proportionally calculates and distributes batches of frames (even when using frame skipping with `select_every_nth`), preventing VRAM spikes in the final cycle. It saves the total loops into an invisible global memory to orchestrate the rest of the nodes automatically.
+5. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: The mandatory "Brain" of the machine. In Cycle 0, it operates as an explorer without knowing the total duration of the original video. In subsequent cycles, it proportionally calculates and distributes batches of frames (even when using frame skipping with `select_every_nth`), preventing VRAM spikes. Everything flows smoothly with integration via ghost variables.
 6. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Progressively archives generated tensors directly to the hard drive and safely assembles them at the end of all cycles.
    - **🧠 Zero OOM (New!):** Replaces RAM accumulation with progressive temporary disk saves (`.pt`), clearing system memory immediately to enable infinite video processing without crashing the system. By disabling `INPUT_IS_LIST`, it handles raw tensors efficiently.
    - **🎵 Audio Passthrough (New!):** Feeds the original pure audio straight to the assembled output during the final loop iteration (returning `None` during intermediate loops to save resources).
@@ -46,7 +46,7 @@ The system is built around three major categories:
 
 ### How to use the Autonomous Machine
 1. **The Start:** Add the `🏁 Loop Start (Index)` and the `📊 Auto Loop Calculator` nodes.
-   - Connect your video's total frames to the `source_frame_count` input of the calculator (or use a numeric Primitive node if it's Text-to-Video).
+   - The calculator no longer requires the `source_frame_count` input. Simply define how many frames you want per loop in `target_frames_per_loop` and the `select_every_nth`.
    - Connect the `current_loop_index` output of `Loop Start` to the calculator, and to your Image and Video nodes (Receiver, Sender, Stitcher). *Don't forget the Sender for keyframe saving!*
    - Ensure the `reset_loop` toggle on the Loop Start is set to `False`.
    - Wire the `chunk_frames`, `skip_frames`, and `select_every_nth` outputs from the calculator into your video loader/generator.

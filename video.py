@@ -12,54 +12,57 @@ class AutoLoopCalculator:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "source_frame_count": ("INT", {"forceInput": True}),
                 "target_frames_per_loop": ("INT", {"default": 50, "min": 1, "max": 10000}),
-                "select_every_nth": ("INT", {"default": 1, "min": 1, "max": 100}), # NUEVO PARÁMETRO
+                "select_every_nth": ("INT", {"default": 1, "min": 1, "max": 100}),
                 "current_loop_index": ("INT", {"forceInput": True}),
             }
         }
 
-    # Ahora devolvemos 3 valores para el cargador de vídeo
     RETURN_TYPES = ("INT", "INT", "INT")
     RETURN_NAMES = ("chunk_frames", "skip_frames", "select_every_nth")
     FUNCTION = "calculate"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
-    def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index):
+    def calculate(self, target_frames_per_loop, select_every_nth, current_loop_index):
         import math
         from . import loop
 
-        if source_frame_count <= 0 or target_frames_per_loop <= 0:
-            loop.global_total_loops = 1
-            return (max(1, source_frame_count), 0, select_every_nth)
+        # Guardamos la config para que el Cargador la use luego en el Ciclo 0
+        loop.global_target_frames = target_frames_per_loop
+        loop.global_stride = select_every_nth
 
-        # 1. Calcular los frames efectivos reales que vamos a procesar
-        effective_source_frames = math.ceil(source_frame_count / select_every_nth)
+        source_frames = loop.global_source_frame_count
 
-        # 2. La matemática proporcional del usuario SOBRE LOS FRAMES EFECTIVOS
-        total_loops = math.ceil(effective_source_frames / target_frames_per_loop)
-        base_frames = effective_source_frames // total_loops
-        remainder = effective_source_frames % total_loops
+        # CICLO 0: Disparo a ciegas (El Explorador)
+        if current_loop_index == 0 or source_frames == 0:
+            print(f"\n📊 [Auto Calculator] Ciclo 0 (Explorador). Solicitando {target_frames_per_loop} frames a ciegas.")
+            return (target_frames_per_loop, 0, select_every_nth)
 
-        plan = []
-        for i in range(total_loops):
+        # CICLOS > 0: Matemática proporcional para el resto del vídeo
+        effective_total = math.ceil(source_frames / select_every_nth)
+
+        if effective_total <= target_frames_per_loop:
+            return (target_frames_per_loop, 0, select_every_nth)
+
+        remaining_effective = effective_total - target_frames_per_loop
+        remaining_loops = math.ceil(remaining_effective / target_frames_per_loop)
+
+        base_frames = remaining_effective // remaining_loops
+        remainder = remaining_effective % remaining_loops
+
+        plan = [target_frames_per_loop] # El Ciclo 0 ya se llevó su parte
+        for i in range(remaining_loops):
             plan.append(base_frames + (1 if i < remainder else 0))
 
-        safe_index = min(current_loop_index, total_loops - 1)
+        safe_index = min(current_loop_index, len(plan) - 1)
         chunk_frames = plan[safe_index]
 
-        # 3. Calcular el salto de frames originales
-        # Sumamos los frames efectivos de ciclos anteriores y los multiplicamos por el salto
         effective_skip = sum(plan[:safe_index])
         skip_frames = effective_skip * select_every_nth
 
-        # Guardamos en la memoria fantasma
-        loop.global_total_loops = total_loops
-
-        print(f"\n📊 [Auto Calculator] Video Original: {source_frame_count} frames | Stride: {select_every_nth}")
-        print(f"   -> Frames efectivos a procesar: {effective_source_frames}")
-        print(f"   -> Planificando {total_loops} ciclos: {plan}")
-        print(f"   -> 🚀 Ciclo {current_loop_index}: Cargando {chunk_frames} frames (Saltando {skip_frames} frames de origen)")
+        print(f"\n📊 [Auto Calculator] Video Original: {source_frames} frames | Efectivos: {effective_total}")
+        print(f"   -> Plan maestro: {plan}")
+        print(f"   -> 🚀 Ciclo {current_loop_index}: Cargando {chunk_frames} frames (Saltando {skip_frames})")
 
         return (chunk_frames, skip_frames, select_every_nth)
 
@@ -108,6 +111,30 @@ class LoadVideoWithSourceAudio:
         else:
             res = list(vhs_output)
             ui = {}
+
+        # 🎯 NUEVO: INTERCEPTACIÓN DEL TOTAL DE FRAMES
+        video_info_dict = res[3] if len(res) > 3 else {}
+        source_frame_count = video_info_dict.get("source_frame_count", 0) if isinstance(video_info_dict, dict) else 0
+
+        if source_frame_count > 0:
+            from . import loop
+            import math
+            loop.global_source_frame_count = source_frame_count
+
+            # Solo fijamos el número total de ciclos durante el Ciclo 0
+            if loop.global_loop_index == 0:
+                target = loop.global_target_frames
+                stride = loop.global_stride
+                eff_total = math.ceil(source_frame_count / stride)
+
+                if eff_total <= target:
+                    loop.global_total_loops = 1
+                else:
+                    remaining = eff_total - target
+                    rem_loops = math.ceil(remaining / target)
+                    loop.global_total_loops = 1 + rem_loops
+
+                print(f"🎥 [Video Loader] Interceptado: {source_frame_count} frames. Total Loops fijado en: {loop.global_total_loops}")
 
         raw_video = kwargs.get("video")
         video_name = raw_video[0] if isinstance(raw_video, (list, tuple)) else raw_video

@@ -1,4 +1,4 @@
-# ComfyUI Sequential Batcher (v1.3.0)
+# ComfyUI Sequential Batcher (v1.3.1)
 
 Una suite altamente especializada de nodos personalizados para ComfyUI diseñada para el **Auto-Encolado Recursivo (Recursive Self-Queuing)** y el procesamiento secuencial autónomo. Esta arquitectura minimiza el uso de VRAM procesando tareas pesadas (como la generación de vídeo) de forma secuencial, lote por lote, orquestadas completamente desde dentro del propio grafo.
 
@@ -8,7 +8,7 @@ Una suite altamente especializada de nodos personalizados para ComfyUI diseñada
 
 A partir de la versión 1.0.0, este repositorio ha pivotado exclusivamente hacia la arquitectura de bucles secuenciales autónomos y memoria global. Toda la deuda técnica de los antiguos nodos (lotes, secuencias, depuración) ha sido eliminada, dejando un código base limpio y fácil de mantener enfocado en los 6 fantásticos.
 
-En la **v1.3.0**, hemos implementado el **"Cerebro Proporcional"**. Hemos eliminado los cables de dependencias circulares (como `total_loops`) usando variables fantasma globales, y añadido un calculador matemático para repartir lotes de vídeo de forma perfecta sin caída de frames, soportando control de framerate (`select_every_nth`).
+En la **v1.3.1**, hemos implementado el **"Ciclo Explorador"**. Hemos eliminado la dependencia externa del número de frames originales en el calculador, utilizando una "Evaluación Perezosa" (Lazy Evaluation). En el Ciclo 0, el calculador dispara a ciegas las intenciones del usuario mientras el cargador de vídeo intercepta el total de frames directamente del nodo VHS, calculando automáticamente y al vuelo el total de bucles para el resto de la automatización. Esto mantiene el JSON limpio para integraciones API (n8n).
 
 ## Los 6 Nodos Principales
 
@@ -26,7 +26,7 @@ El sistema se construye alrededor de tres categorías principales:
    - **💾 Guardado de Keyframes (¡Nuevo en v1.1.0!):** Ahora recibe el índice actual y realiza un volcado de seguridad en el disco duro, guardando progresivamente `keyframe_XXX.png` en cada ciclo para prevenir pérdidas de datos.
 
 ### 🎞️ Video (Ensamblaje y Validación)
-5. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: Es el "Cerebro" obligatorio de la máquina. Calcula y reparte proporcionalmente los lotes de frames (incluso cuando usas salto de frames con `select_every_nth`), evitando caídas de VRAM en el último ciclo, y guarda el total de bucles en una memoria global invisible para orquestar al resto de los nodos automáticamente.
+5. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: Es el "Cerebro" obligatorio de la máquina. En el Ciclo 0 actúa como explorador sin conocer la longitud del vídeo original. En ciclos posteriores, calcula y reparte proporcionalmente los lotes de frames (incluso cuando usas salto de frames con `select_every_nth`), evitando caídas de VRAM. Todo fluye gracias a su integración automática mediante variables fantasma.
 6. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Archiva progresivamente los tensores generados en el disco duro y los ensambla de forma segura al final de todos los ciclos.
    - **🧠 Cero OOM (¡Nuevo!):** Sustituye las acumulaciones en memoria por guardados temporales en disco (`.pt`), borrando la RAM de inmediato para poder procesar vídeos infinitos sin colapsar el sistema. Al desactivar `INPUT_IS_LIST`, maneja tensores puros eficientemente.
    - **🎵 Passthrough de Audio (¡Nuevo!):** Alimenta directamente el audio original hacia el archivo ensamblado en el último ciclo (devolviendo `None` en los ciclos intermedios para ahorrar recursos).
@@ -46,7 +46,7 @@ El sistema se construye alrededor de tres categorías principales:
 
 ### Cómo Conectar tu Nueva Máquina Autónoma
 1. **El Inicio:** Añade el nodo `🏁 Loop Start (Index)` y el nodo `📊 Auto Loop Calculator`.
-   - Conecta el total de frames de tu vídeo a la entrada `source_frame_count` del calculador (o usa un nodo numérico Primitive si es Texto-a-Vídeo).
+   - El calculador ya no necesita el cable de entrada de `source_frame_count`. Solo define cuántos frames quieres por lote en `target_frames_per_loop` y el `select_every_nth`.
    - Conecta la salida `current_loop_index` del `Loop Start` al calculador y a los nodos de Imagen y Video (Receiver, Sender, Stitcher). *¡No olvides conectar el Sender para el guardado de los keyframes!*
    - Asegúrate de que su interruptor `reset_loop` del Loop Start está en `False`.
    - Lleva las salidas `chunk_frames`, `skip_frames` y `select_every_nth` del calculador hacia tu cargador/generador de vídeo.
