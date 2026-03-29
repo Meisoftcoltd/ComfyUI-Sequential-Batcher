@@ -6,6 +6,9 @@ from . import register_node
 
 global_loop_index = 0
 global_total_loops = 1  # 🌍 NUEVA MEMORIA GLOBAL PARA LOS CICLOS
+global_source_frame_count = 0  # NUEVO: Memoria del total de frames
+global_target_frames = 50      # NUEVO: Memoria del target del usuario
+global_stride = 1              # NUEVO: Memoria del salto
 
 @register_node
 class SequentialLoopStart:
@@ -30,6 +33,7 @@ class SequentialLoopStart:
     def get_index(self, reset_loop, loop_idx):
         global global_loop_index
         global global_total_loops
+        global global_source_frame_count
 
         print(f"\n{'='*50}")
         print(f"🚀 [DEBUG] NODO: Loop Start")
@@ -40,6 +44,7 @@ class SequentialLoopStart:
         if is_reset:
             global_loop_index = 0
             global_total_loops = 1 # Reinicio de seguridad limpia la memoria fantasma
+            global_source_frame_count = 0 # Reinicio limpio
             print("   -> 🔄 Bucle reiniciado a 0 manualmente.")
         else:
             global_loop_index = loop_idx
