@@ -121,13 +121,18 @@ class IncrementalVideoStitcher:
         cache_dir = os.path.join(folder_paths.get_temp_directory(), "wan_stitcher_cache")
         os.makedirs(cache_dir, exist_ok=True)
 
+        # 1. Guardar el lote completo actual en disco
         path = os.path.join(cache_dir, f"batch_{current_loop_index:04d}.pt")
         torch.save(images.cpu(), path)
         print(f"🎞️ [Stitcher] Lote {current_loop_index} guardado en disco.")
 
         if current_loop_index < total_loops - 1:
-            return (torch.zeros((1, 8, 8, 3)), None)
+            # 🛠️ TRUCO MAESTRO: En lugar de un frame negro, enviamos el primer frame real del lote.
+            # Mantiene los cables vivos y establece la resolución correcta para RIFE/Upscale.
+            preview_frame = images[0:1]
+            return (preview_frame, None)
 
+        # 2. Ciclo final: Ensamblar todos los lotes
         print(f"📦 [Stitcher] Ensamblando todos los lotes de vídeo...")
         all_tensors = []
         for i in range(total_loops):
