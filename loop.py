@@ -5,6 +5,7 @@ import json
 from . import register_node
 
 global_loop_index = 0
+global_total_loops = 1  # 🌍 NUEVA MEMORIA GLOBAL PARA LOS CICLOS
 
 @register_node
 class SequentialLoopStart:
@@ -14,7 +15,6 @@ class SequentialLoopStart:
             "required": {
                 "reset_loop": ("BOOLEAN", {"default": False}),
                 "loop_idx": ("INT", {"default": 0, "min": 0, "max": 10000}),
-                "total_loops": ("INT", {"default": 1, "min": 1, "max": 10000}),
             }
         }
 
@@ -27,17 +27,19 @@ class SequentialLoopStart:
     def IS_CHANGED(cls, **kwargs):
         return time.time()
 
-    def get_index(self, reset_loop, loop_idx, total_loops):
+    def get_index(self, reset_loop, loop_idx):
         global global_loop_index
+        global global_total_loops
 
         print(f"\n{'='*50}")
         print(f"🚀 [DEBUG] NODO: Loop Start")
-        print(f"   -> Input loop_idx (UI/Trigger): {loop_idx} / {total_loops - 1} (Total: {total_loops})")
+        print(f"   -> Input loop_idx: {loop_idx} (Total Esperado: {global_total_loops})")
         print(f"   -> Input reset_loop: {reset_loop}")
 
         is_reset = str(reset_loop).lower() in ['true', '1', 't', 'y']
         if is_reset:
             global_loop_index = 0
+            global_total_loops = 1 # Reinicio de seguridad limpia la memoria fantasma
             print("   -> 🔄 Bucle reiniciado a 0 manualmente.")
         else:
             global_loop_index = loop_idx
@@ -54,7 +56,6 @@ class SequentialLoopTrigger:
         return {
             "required": {
                 "trigger_dependency": ("*", ),
-                "target_loops": ("INT", {"default": 4, "min": 1, "max": 1000}),
                 "port": ("INT", {"default": 8188, "min": 1000, "max": 9999}),
             },
             "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"}
@@ -70,11 +71,14 @@ class SequentialLoopTrigger:
     def IS_CHANGED(cls, **kwargs):
         return time.time()
 
-    def trigger_next(self, trigger_dependency, target_loops, port, prompt=None, extra_pnginfo=None):
+    def trigger_next(self, trigger_dependency, port, prompt=None, extra_pnginfo=None):
         if trigger_dependency is None:
             raise ValueError("❌ ERROR CRÍTICO: El nodo 'Loop Trigger' no tiene nada conectado en 'trigger_dependency'. Debes conectar la salida del Stitcher para que el bucle pueda continuar.")
 
         global global_loop_index
+        global global_total_loops
+
+        target_loops = global_total_loops
         next_loop = global_loop_index + 1
 
         print(f"\n{'='*50}")

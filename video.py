@@ -7,27 +7,61 @@ import time
 from . import register_node
 
 @register_node
-class WanFrameValidator:
+class AutoLoopCalculator:
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "target_frames": ("INT", {"default": 49, "min": 1, "max": 10000}),
-                "current_loop_index": ("INT", {"default": 0, "forceInput": True}),
+                "source_frame_count": ("INT", {"forceInput": True}),
+                "target_frames_per_loop": ("INT", {"default": 50, "min": 1, "max": 10000}),
+                "select_every_nth": ("INT", {"default": 1, "min": 1, "max": 100}), # NUEVO PARÁMETRO
+                "current_loop_index": ("INT", {"forceInput": True}),
             }
         }
 
-    RETURN_TYPES = ("INT", "INT")
-    RETURN_NAMES = ("valid_frames", "skip_frames")
-    FUNCTION = "validate"
+    # Ahora devolvemos 3 valores para el cargador de vídeo
+    RETURN_TYPES = ("INT", "INT", "INT")
+    RETURN_NAMES = ("chunk_frames", "skip_frames", "select_every_nth")
+    FUNCTION = "calculate"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
-    def validate(self, target_frames, current_loop_index):
-        k = (target_frames - 1) // 4
-        corrected_frames = max(1, (4 * k) + 1)
-        skip_frames = current_loop_index * corrected_frames
-        print(f"🛡️ [Wan Validator] Lote: {corrected_frames} frames | Saltar: {skip_frames} frames")
-        return (corrected_frames, skip_frames)
+    def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index):
+        import math
+        from . import loop
+
+        if source_frame_count <= 0 or target_frames_per_loop <= 0:
+            loop.global_total_loops = 1
+            return (max(1, source_frame_count), 0, select_every_nth)
+
+        # 1. Calcular los frames efectivos reales que vamos a procesar
+        effective_source_frames = math.ceil(source_frame_count / select_every_nth)
+
+        # 2. La matemática proporcional del usuario SOBRE LOS FRAMES EFECTIVOS
+        total_loops = math.ceil(effective_source_frames / target_frames_per_loop)
+        base_frames = effective_source_frames // total_loops
+        remainder = effective_source_frames % total_loops
+
+        plan = []
+        for i in range(total_loops):
+            plan.append(base_frames + (1 if i < remainder else 0))
+
+        safe_index = min(current_loop_index, total_loops - 1)
+        chunk_frames = plan[safe_index]
+
+        # 3. Calcular el salto de frames originales
+        # Sumamos los frames efectivos de ciclos anteriores y los multiplicamos por el salto
+        effective_skip = sum(plan[:safe_index])
+        skip_frames = effective_skip * select_every_nth
+
+        # Guardamos en la memoria fantasma
+        loop.global_total_loops = total_loops
+
+        print(f"\n📊 [Auto Calculator] Video Original: {source_frame_count} frames | Stride: {select_every_nth}")
+        print(f"   -> Frames efectivos a procesar: {effective_source_frames}")
+        print(f"   -> Planificando {total_loops} ciclos: {plan}")
+        print(f"   -> 🚀 Ciclo {current_loop_index}: Cargando {chunk_frames} frames (Saltando {skip_frames} frames de origen)")
+
+        return (chunk_frames, skip_frames, select_every_nth)
 
 @register_node
 class LoadVideoWithSourceAudio:
@@ -108,7 +142,6 @@ class IncrementalVideoStitcher:
                 "images": ("IMAGE",),
                 "audio": ("AUDIO",),
                 "current_loop_index": ("INT", {"default": 0}),
-                "total_loops": ("INT", {"default": 1}),
             }
         }
 
@@ -117,7 +150,10 @@ class IncrementalVideoStitcher:
     FUNCTION = "stitch"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
-    def stitch(self, images, audio, current_loop_index, total_loops):
+    def stitch(self, images, audio, current_loop_index):
+        from . import loop
+        total_loops = loop.global_total_loops # Leemos la variable global
+
         cache_dir = os.path.join(folder_paths.get_temp_directory(), "wan_stitcher_cache")
         os.makedirs(cache_dir, exist_ok=True)
 

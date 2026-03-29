@@ -1,4 +1,4 @@
-# ComfyUI Sequential Batcher (v1.1.0)
+# ComfyUI Sequential Batcher (v1.3.0)
 
 A highly specialized suite of custom nodes for ComfyUI designed for **Recursive Self-Queuing** and autonomous sequential processing. This architecture minimizes VRAM usage by processing heavy tasks (like video generation) sequentially, batch-by-batch, orchestrated entirely from within the graph.
 
@@ -8,7 +8,7 @@ A highly specialized suite of custom nodes for ComfyUI designed for **Recursive 
 
 Starting with v1.0.0, this repository has pivoted exclusively to the autonomous sequential loops and global memory architecture. All legacy technical debt (deprecated batch/sequence/debug nodes) has been pruned, leaving a clean, highly maintainable codebase focused on 6 core nodes.
 
-In **v1.1.0**, we have introduced progressive disk saving capabilities, audio multiplexing support, and a deep JSON hack to defeat ComfyUI's aggressive cache.
+In **v1.3.0**, we implemented the **"Proportional Brain"**. We've eliminated circular dependency cables (like `total_loops`) using global ghost variables, and added a mathematical calculator to perfectly distribute video batches without dropping frames, supporting framerate striding via `select_every_nth`.
 
 ## The 6 Core Nodes
 
@@ -26,7 +26,7 @@ The system is built around three major categories:
    - **💾 Keyframe Dumping (New in v1.1.0!):** Now receives the current index and performs a safety dump to the hard drive, progressively saving `keyframe_XXX.png` every cycle to prevent data loss.
 
 ### 🎞️ Video (Assembly and Validation)
-5. **🛡️ Wan Frame Validator (`WanFrameValidator`)**: Validates and corrects the target number of frames to ensure they fit the `4k+1` formula required by specific models (e.g., Wan).
+5. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: The mandatory "Brain" of the machine. It proportionally calculates and distributes batches of frames (even when using frame skipping with `select_every_nth`), preventing VRAM spikes in the final cycle. It saves the total loops into an invisible global memory to orchestrate the rest of the nodes automatically.
 6. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Progressively archives generated tensors directly to the hard drive and safely assembles them at the end of all cycles.
    - **🧠 Zero OOM (New!):** Replaces RAM accumulation with progressive temporary disk saves (`.pt`), clearing system memory immediately to enable infinite video processing without crashing the system. By disabling `INPUT_IS_LIST`, it handles raw tensors efficiently.
    - **🎵 Audio Passthrough (New!):** Feeds the original pure audio straight to the assembled output during the final loop iteration (returning `None` during intermediate loops to save resources).
@@ -45,12 +45,14 @@ The system is built around three major categories:
 3. Restart ComfyUI.
 
 ### How to use the Autonomous Machine
-1. **The Start:** Add the `🏁 Loop Start (Index)` node.
-   - Connect its `current_loop_index` to the index inputs of your `SessionImageReceiver`, `SessionImageSender`, and `Incremental Auto-Stitcher`. *Don't forget the Sender for keyframe saving!*
-   - Ensure `reset_loop` is set to `False`.
+1. **The Start:** Add the `🏁 Loop Start (Index)` and the `📊 Auto Loop Calculator` nodes.
+   - Connect your video's total frames to the `source_frame_count` input of the calculator (or use a numeric Primitive node if it's Text-to-Video).
+   - Connect the `current_loop_index` output of `Loop Start` to the calculator, and to your Image and Video nodes (Receiver, Sender, Stitcher). *Don't forget the Sender for keyframe saving!*
+   - Ensure the `reset_loop` toggle on the Loop Start is set to `False`.
+   - Wire the `chunk_frames`, `skip_frames`, and `select_every_nth` outputs from the calculator into your video loader/generator.
 2. **Connecting Audio (Optional):** If your workflow has sound, pull a cable from your initial node's audio output (e.g., `VHS_LoadVideo`) and connect it to the blue `audio` port on your `Incremental Auto-Stitcher`.
-3. **The End:** Add the `🚀 Loop Trigger (Auto-Queue)` node. Crucially, connect the text output (`final_video_path`) from your `Incremental Auto-Stitcher` to the `trigger_dependency` input. This forces the trigger to wait until the video is physically saved. Set your desired `target_loops`.
-4. **Execution:** **You no longer need to check "Auto Queue".** Just press "Queue Prompt" **once**. Batch 0 starts, and upon finishing, the trigger invisibly signals the server. Thanks to Anti-Cache Injection, cache is destroyed on every iteration, and progress flows until your video is complete.
+3. **The End:** Add the `🚀 Loop Trigger (Auto-Queue)` node. Crucially, connect the image or audio output from your `Incremental Auto-Stitcher` into the `trigger_dependency` input. This forces the trigger to wait until the video is physically saved to the temporary disk before firing. (Note: thanks to the global ghost memory, the Trigger already knows how many loops to execute without needing extra cables).
+4. **Execution:** **You no longer need to check "Auto Queue".** Just press "Queue Prompt" **once**. Batch 0 starts, and upon finishing, the trigger invisibly signals the server. Thanks to Anti-Cache Injection, cache is destroyed on every iteration, and progress flows until your video is perfectly distributed and complete.
 
 ---
 *Created to push the boundaries of ComfyUI automation.*
