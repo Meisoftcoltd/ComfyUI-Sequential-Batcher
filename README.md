@@ -1,4 +1,4 @@
-# ComfyUI Sequential Batcher (v1.4.0)
+# ComfyUI Sequential Batcher (v1.4.1)
 
 Una suite altamente especializada de nodos personalizados para ComfyUI diseñada para el **Auto-Encolado Recursivo (Recursive Self-Queuing)** y el procesamiento secuencial autónomo. Esta arquitectura minimiza el uso de VRAM procesando tareas pesadas (como la generación de vídeo) de forma secuencial, lote por lote, orquestadas completamente desde dentro del propio grafo.
 
@@ -6,9 +6,9 @@ Una suite altamente especializada de nodos personalizados para ComfyUI diseñada
 
 ## La Arquitectura Híbrida de Identidad
 
-A partir de la versión 1.4.0, hemos dado un paso más allá implementando la **Arquitectura Híbrida de Identidad**. Toda la deuda técnica de los antiguos cargadores acoplados ha sido eliminada. Ahora, el procesamiento de video se divide en tres roles lógicos principales:
+A partir de la versión 1.4.1, hemos dado un paso más allá implementando la **Arquitectura Híbrida de Identidad**. Toda la deuda técnica de los antiguos cargadores acoplados ha sido eliminada. Ahora, el procesamiento de video se divide en tres roles lógicos principales:
 
-1. **El Explorador (`VideoAnalyzerWithAudio`)**: Un nuevo nodo que utiliza OpenCV para escanear el vídeo de entrada (en el Ciclo 0) en busca de rostros nítidos y frontales, extrayendo también la pista de audio de forma íntegra.
+1. **El Explorador (`VideoAnalyzerWithAudio`)**: Un nodo rediseñado con una interfaz ultra-limpia (integrada nativamente con el widget de VideoHelperSuite). Utiliza OpenCV para escanear el vídeo de entrada en busca de rostros nítidos, extraer la pista de audio íntegra y **generar y emitir un Frame de Referencia (Preview Visual)** directamente en el lienzo de ComfyUI.
 2. **El Cerebro (`AutoLoopCalculator`)**: Recibe la lista de frames seguros del Explorador y planifica cortes asimétricos e inteligentes. En lugar de dividir el video matemáticamente de forma ciega, prioriza realizar cortes en frames donde el rostro es nítido, manteniendo la coherencia de identidad entre bucles.
 3. **El Obrero (`VHS_LoadVideo`)**: El nodo estándar de VideoHelperSuite de ComfyUI ahora se encarga exclusivamente del trabajo pesado: extraer los tensores de vídeo exactos según las órdenes del Cerebro.
 
@@ -28,7 +28,7 @@ El sistema se construye alrededor de tres categorías principales:
    - **💾 Guardado de Keyframes (¡Nuevo en v1.1.0!):** Ahora recibe el índice actual y realiza un volcado de seguridad en el disco duro, guardando progresivamente `keyframe_XXX.png` en cada ciclo para prevenir pérdidas de datos.
 
 ### 🎞️ Video (Ensamblaje y Validación)
-5. **🕵️ Video Analyzer + Audio (`VideoAnalyzerWithAudio`)**: Es el "Explorador" de la máquina. Escanea el vídeo usando OpenCV para detectar frames con rostros nítidos y extrae la pista de audio íntegra de forma pura mediante Torchaudio.
+5. **🕵️ Video Analyzer + Audio (`VideoAnalyzerWithAudio`)**: Es el "Explorador" de la máquina. Escanea el vídeo usando OpenCV para detectar frames con rostros nítidos, extrae la pista de audio íntegra de forma pura mediante Torchaudio, y genera un visual **Preview del Frame de Referencia** en su propia interfaz. Emite dicho frame de referencia en formato de imagen (IMAGE) para el resto del flujo de trabajo.
 6. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: Es el "Cerebro". Recibe la información del Explorador y calcula los cortes de los frames (chunk, skip) de forma asimétrica. Si se le pasa la lista de `safe_faces_list`, forzará los cortes en fotogramas donde haya rostros reconocibles para no romper la fluidez.
 7. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Archiva progresivamente los tensores generados en el disco duro y los ensambla de forma segura al final de todos los ciclos.
    - **🧠 Cero OOM:** Sustituye las acumulaciones en memoria por guardados temporales en disco (`.pt`), borrando la RAM de inmediato para poder procesar vídeos infinitos sin colapsar el sistema.

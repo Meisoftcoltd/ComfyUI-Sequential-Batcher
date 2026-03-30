@@ -1,4 +1,4 @@
-# ComfyUI Sequential Batcher (v1.4.0)
+# ComfyUI Sequential Batcher (v1.4.1)
 
 A highly specialized suite of custom nodes for ComfyUI designed for **Recursive Self-Queuing** and autonomous sequential processing. This architecture minimizes VRAM usage by processing heavy tasks (like video generation) sequentially, batch-by-batch, orchestrated entirely from within the graph.
 
@@ -6,9 +6,9 @@ A highly specialized suite of custom nodes for ComfyUI designed for **Recursive 
 
 ## The Hybrid Identity Architecture
 
-Starting with version 1.4.0, we have taken a step further by implementing the **Hybrid Identity Architecture**. All technical debt from older coupled loaders has been eliminated. Now, video processing is divided into three main logical roles:
+Starting with version 1.4.1, we have taken a step further by implementing the **Hybrid Identity Architecture**. All technical debt from older coupled loaders has been eliminated. Now, video processing is divided into three main logical roles:
 
-1. **The Explorer (`VideoAnalyzerWithAudio`)**: A new node that utilizes OpenCV to scan the input video (in Cycle 0) for sharp, frontal faces, while also cleanly extracting the entire audio track.
+1. **The Explorer (`VideoAnalyzerWithAudio`)**: A redesigned node with an ultra-clean interface (natively integrated with the VideoHelperSuite widget). It uses OpenCV to scan the input video for sharp faces, extracts the intact audio track, and **generates and outputs a Reference Frame (Visual Preview)** directly onto the ComfyUI canvas.
 2. **The Brain (`AutoLoopCalculator`)**: Receives the safe frames list from the Explorer and plans asymmetric, intelligent cuts. Instead of blindly dividing the video mathematically, it prioritizes making cuts on frames where the face is sharp, thereby maintaining identity coherence between loops.
 3. **The Worker (`VHS_LoadVideo`)**: The standard ComfyUI VideoHelperSuite node is now solely responsible for the heavy lifting: extracting the exact video tensors according to the Brain's orders.
 
@@ -28,7 +28,7 @@ The system is built around three major categories:
    - **💾 Keyframe Dumping (New in v1.1.0!):** Now receives the current index and performs a safety dump to the hard drive, progressively saving `keyframe_XXX.png` every cycle to prevent data loss.
 
 ### 🎞️ Video (Assembly and Validation)
-5. **🕵️ Video Analyzer + Audio (`VideoAnalyzerWithAudio`)**: The "Explorer" of the machine. Scans the video using OpenCV to detect frames with sharp faces and extracts the pure, intact audio track using Torchaudio.
+5. **🕵️ Video Analyzer + Audio (`VideoAnalyzerWithAudio`)**: The "Explorer" of the machine. Scans the video using OpenCV to detect frames with sharp faces, extracts the pure, intact audio track using Torchaudio, and generates a **Reference Frame Visual Preview** on its own interface. It outputs this reference frame as an IMAGE format for the rest of the workflow.
 6. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: The "Brain". Receives information from the Explorer and calculates frame cuts (chunk, skip) asymmetrically. If provided with a `safe_faces_list`, it forces cuts on frames with recognizable faces to maintain fluid continuity.
 7. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Progressively archives generated tensors directly to the hard drive and safely assembles them at the end of all cycles.
    - **🧠 Zero OOM:** Replaces RAM accumulation with progressive temporary disk saves (`.pt`), clearing system memory immediately to enable infinite video processing without crashing the system.
