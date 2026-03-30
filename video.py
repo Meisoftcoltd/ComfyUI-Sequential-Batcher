@@ -36,8 +36,8 @@ class VideoAnalyzerWithAudio:
             }
         }
 
-    RETURN_TYPES = ("STRING", "INT", "AUDIO", "FACE_CUTS", "IMAGE")
-    RETURN_NAMES = ("video_name", "total_frames", "source_audio", "safe_faces_list", "reference_frame")
+    RETURN_TYPES = ("STRING", "INT", "FLOAT", "AUDIO", "FACE_CUTS", "IMAGE")
+    RETURN_NAMES = ("video_name", "total_frames", "source_fps", "source_audio", "safe_faces_list", "reference_frame")
     OUTPUT_NODE = True  # Obligatorio para que ComfyUI renderice la preview
     FUNCTION = "analyze"
     CATEGORY = "🔁 Sequential Batcher/Video"
@@ -78,6 +78,7 @@ class VideoAnalyzerWithAudio:
 
         # 2. Escaneo de OpenCV (Frames, Rostros y Referencia)
         frame_count = 0
+        source_fps = 0.0
         safe_faces = []
         ref_tensor = torch.zeros((1, 64, 64, 3), dtype=torch.float32) # Tensor negro de seguridad
         ui_result = {}
@@ -87,7 +88,9 @@ class VideoAnalyzerWithAudio:
         else:
             cap = cv2.VideoCapture(video_path)
             frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            source_fps = float(cap.get(cv2.CAP_PROP_FPS))
             print(f"   -> 🎞️ Total Frames detectados: {frame_count}")
+            print(f"   -> ⏱️ FPS detectados: {source_fps}")
 
             # Extraer el Frame de Referencia específico
             safe_ref_idx = min(reference_frame_idx, max(0, frame_count - 1))
@@ -139,7 +142,7 @@ class VideoAnalyzerWithAudio:
         print(f"{'='*50}\n")
 
         # 💡 EL BYPASS A VHS: Pasamos video_path (Ruta Absoluta) en lugar de video_name
-        return {"ui": ui_result, "result": (video_path, frame_count, source_audio, safe_faces, ref_tensor)}
+        return {"ui": ui_result, "result": (video_path, frame_count, source_fps, source_audio, safe_faces, ref_tensor)}
 
 @register_node
 class AutoLoopCalculator:
