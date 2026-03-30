@@ -27,6 +27,9 @@ El sistema se construye alrededor de tres categorías principales:
 4. **📤 Session Image Sender (`SessionImageSender`)**: Extrae la última imagen del lote y la asegura en la memoria del sistema para el siguiente ciclo.
    - **💾 Guardado de Keyframes (¡Nuevo en v1.1.0!):** Ahora recibe el índice actual y realiza un volcado de seguridad en el disco duro, guardando progresivamente `keyframe_XXX.png` en cada ciclo para prevenir pérdidas de datos.
 
+### 🛠️ Herramientas (Tools)
+Una suite de nodos dedicados (ResTool 8x, 16x, 32x, 64x) para calcular resoluciones seguras al instante. Selecciona tu formato (ej. 9:16) y tu resolución base (ej. 1080). El nodo correspondiente aplicará una restricción matemática estricta hacia abajo para garantizar que el ancho y el alto sean perfectamente divisibles por la arquitectura de tu modelo, protegiendo tu VRAM de errores de tensores.
+
 ### 🎞️ Video (Ensamblaje y Validación)
 5. **🕵️ Video Analyzer + Audio (`VideoAnalyzerWithAudio`)**: Es el "Explorador" de la máquina. Escanea el vídeo usando OpenCV para detectar frames con rostros nítidos, extrae la pista de audio íntegra de forma pura mediante Torchaudio, y genera un visual **Preview del Frame de Referencia** en su propia interfaz. Emite dicho frame de referencia en formato de imagen (IMAGE) para el resto del flujo de trabajo.
 6. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: Es el "Cerebro". Recibe la información del Explorador y calcula los cortes de los frames (chunk, skip) de forma asimétrica. Si se le pasa la lista de `safe_faces_list`, forzará los cortes en fotogramas donde haya rostros reconocibles para no romper la fluidez. Ahora incluye un **Margen Dinámico del ±10%** que absorbe los remanentes de vídeo en el último límite, garantizando que todos los ciclos mantengan una duración estable sin generar colas ineficientes.

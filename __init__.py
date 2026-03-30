@@ -10,10 +10,16 @@ def register_node(c, display_name=None):
     NODE_DISPLAY_NAME_MAPPINGS[c.__name__] = display_name or c.__name__
     return c
 
-from . import image, loop, video
+from . import image, loop, video, tools
 
 # Display name mappings with emojis
 NODE_DISPLAY_NAME_MAPPINGS.update({
+    # Tools
+    "ResTool8x": "📐 ResTool 8x (SD1.5)",
+    "ResTool16x": "📏 ResTool 16x (SDXL)",
+    "ResTool32x": "🎞️ ResTool 32x (WanVideo)",
+    "ResTool64x": "🎬 ResTool 64x (Hunyuan)",
+
     # Image (Memoria de Sesión)
     "SessionImageReceiver": "📥 Session Image Receiver",
     "SessionImageSender": "📤 Session Image Sender",
