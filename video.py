@@ -170,35 +170,54 @@ class AutoLoopCalculator:
             loop.global_total_loops = 1
             return (max(1, source_frame_count), 0, select_every_nth)
 
-        # Calculamos la meta en frames ORIGINALES para no romper el stride
+        # 1. Parámetros base y margen del ±10%
         target_original = target_frames_per_loop * select_every_nth
+        margin = max(1, int(target_original * 0.10))
+        min_chunk = target_original - margin
+        max_chunk = target_original + margin
+
         cuts = [0]
         current_pos = 0
 
         print(f"\n{'='*50}")
         print(f"📊 [DEBUG] NODO: Auto Loop Calculator (Cerebro)")
+        print(f"   -> Target: {target_original} | Margen 10%: {min_chunk} a {max_chunk} frames")
 
-        while current_pos + target_original < source_frame_count:
+        # 2. Búsqueda de cortes
+        while current_pos < source_frame_count:
+            frames_left = source_frame_count - current_pos
+
+            # Si lo que queda cabe en el margen máximo, cerramos el último bloque
+            if frames_left <= max_chunk:
+                cuts.append(source_frame_count)
+                print(f"   -> 🧮 Resto final ({frames_left} frames) absorbido en el límite máximo.")
+                break
+
             ideal_cut = current_pos + target_original
+            min_cut = current_pos + min_chunk
+            max_cut = current_pos + max_chunk
+
+            # Asegurar que no nos pasamos del total
+            max_cut = min(max_cut, source_frame_count)
             best_cut = ideal_cut
 
             if safe_faces_list and len(safe_faces_list) > 0:
-                # Buscar el rostro más cercano al corte ideal, buscando hacia atrás
-                min_acceptable = current_pos + int(target_original * 0.5)
-                valid_cuts = [f for f in safe_faces_list if min_acceptable <= f <= ideal_cut]
+                valid_cuts = [f for f in safe_faces_list if min_cut <= f <= max_cut]
                 if valid_cuts:
-                    best_cut = max(valid_cuts)
-                    print(f"   -> ✂️ Corte Inteligente en frame original: {best_cut} (El ideal era {ideal_cut})")
+                    best_cut = min(valid_cuts, key=lambda x: abs(x - ideal_cut))
+                    print(f"   -> ✂️ Corte Inteligente: {best_cut} (Ideal: {ideal_cut} | Ventana: {min_cut}-{max_cut})")
                 else:
-                    print(f"   -> ⚠️ Sin rostros cerca de {ideal_cut}. Forzando corte matemático perfecto.")
+                    print(f"   -> ⚠️ Sin caras en ventana {min_cut}-{max_cut}. Forzando ideal: {ideal_cut}")
+            else:
+                print(f"   -> 🧮 Corte matemático: {ideal_cut}")
 
             cuts.append(best_cut)
             current_pos = best_cut
 
-        cuts.append(source_frame_count)
         total_loops = len(cuts) - 1
         loop.global_total_loops = total_loops
 
+        # 3. Extracción del ciclo actual
         safe_index = min(current_loop_index, total_loops - 1)
         start_frame = cuts[safe_index]
         end_frame = cuts[safe_index + 1]
@@ -207,8 +226,8 @@ class AutoLoopCalculator:
         effective_chunk_frames = math.ceil(original_chunk_length / select_every_nth)
         skip_frames = start_frame
 
-        print(f"   -> 🎬 Plan de Cortes (Frames Originales): {cuts}")
-        print(f"   -> 🚀 Ciclo {current_loop_index}: Generando {effective_chunk_frames} frames efectivos (Saltando los primeros {skip_frames} originales)")
+        print(f"   -> 🎬 Plan de Cortes: {cuts}")
+        print(f"   -> 🚀 Ciclo {current_loop_index}: Generando {effective_chunk_frames} frames efectivos (Saltando {skip_frames})")
         print(f"{'='*50}\n")
 
         return (effective_chunk_frames, skip_frames, select_every_nth)

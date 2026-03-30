@@ -1,4 +1,4 @@
-# ComfyUI Sequential Batcher (v1.4.1)
+# ComfyUI Sequential Batcher (v1.4.3)
 
 Una suite altamente especializada de nodos personalizados para ComfyUI diseñada para el **Auto-Encolado Recursivo (Recursive Self-Queuing)** y el procesamiento secuencial autónomo. Esta arquitectura minimiza el uso de VRAM procesando tareas pesadas (como la generación de vídeo) de forma secuencial, lote por lote, orquestadas completamente desde dentro del propio grafo.
 
@@ -29,7 +29,7 @@ El sistema se construye alrededor de tres categorías principales:
 
 ### 🎞️ Video (Ensamblaje y Validación)
 5. **🕵️ Video Analyzer + Audio (`VideoAnalyzerWithAudio`)**: Es el "Explorador" de la máquina. Escanea el vídeo usando OpenCV para detectar frames con rostros nítidos, extrae la pista de audio íntegra de forma pura mediante Torchaudio, y genera un visual **Preview del Frame de Referencia** en su propia interfaz. Emite dicho frame de referencia en formato de imagen (IMAGE) para el resto del flujo de trabajo.
-6. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: Es el "Cerebro". Recibe la información del Explorador y calcula los cortes de los frames (chunk, skip) de forma asimétrica. Si se le pasa la lista de `safe_faces_list`, forzará los cortes en fotogramas donde haya rostros reconocibles para no romper la fluidez.
+6. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: Es el "Cerebro". Recibe la información del Explorador y calcula los cortes de los frames (chunk, skip) de forma asimétrica. Si se le pasa la lista de `safe_faces_list`, forzará los cortes en fotogramas donde haya rostros reconocibles para no romper la fluidez. Ahora incluye un **Margen Dinámico del ±10%** que absorbe los remanentes de vídeo en el último límite, garantizando que todos los ciclos mantengan una duración estable sin generar colas ineficientes.
 7. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Archiva progresivamente los tensores generados en el disco duro y los ensambla de forma segura al final de todos los ciclos.
    - **🧠 Cero OOM:** Sustituye las acumulaciones en memoria por guardados temporales en disco (`.pt`), borrando la RAM de inmediato para poder procesar vídeos infinitos sin colapsar el sistema.
    - **🎵 Passthrough de Audio:** Alimenta directamente el audio original hacia el archivo ensamblado en el último ciclo (devolviendo `None` en los ciclos intermedios para ahorrar recursos).
