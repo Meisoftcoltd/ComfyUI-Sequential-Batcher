@@ -1,4 +1,4 @@
-# ComfyUI Sequential Batcher (v1.4.3)
+# ComfyUI Sequential Batcher (v1.5.0)
 
 Una suite altamente especializada de nodos personalizados para ComfyUI diseñada para el **Auto-Encolado Recursivo (Recursive Self-Queuing)** y el procesamiento secuencial autónomo. Esta arquitectura minimiza el uso de VRAM procesando tareas pesadas (como la generación de vídeo) de forma secuencial, lote por lote, orquestadas completamente desde dentro del propio grafo.
 
@@ -26,9 +26,10 @@ El sistema se construye alrededor de tres categorías principales:
 3. **📥 Session Image Receiver (`SessionImageReceiver`)**: Proporciona la imagen inicial o la última generada del ciclo anterior, detectando inteligentemente el inicio de una sesión en la memoria RAM.
 4. **📤 Session Image Sender (`SessionImageSender`)**: Extrae la última imagen del lote y la asegura en la memoria del sistema para el siguiente ciclo.
    - **💾 Guardado de Keyframes (¡Nuevo en v1.1.0!):** Ahora recibe el índice actual y realiza un volcado de seguridad en el disco duro, guardando progresivamente `keyframe_XXX.png` en cada ciclo para prevenir pérdidas de datos.
+   - **🏎️ Motor Dinámico F1:** El `Session Image Sender` ahora trunca dinámicamente el tensor generado si la IA falla (ej. el personaje se da la vuelta), actualizando el acumulador global para que el `Auto Loop Calculator` reajuste el siguiente ciclo de extracción, garantizando una identidad perfecta sin desincronizar el audio.
 
 ### 🛠️ Herramientas (Tools)
-Una suite de nodos dedicados (ResTool 8x, 16x, 32x, 64x) para calcular resoluciones seguras al instante. Selecciona tu formato (ej. 9:16) y tu resolución base (ej. 1080). El nodo correspondiente aplicará una restricción matemática estricta hacia abajo para garantizar que el ancho y el alto sean perfectamente divisibles por la arquitectura de tu modelo, protegiendo tu VRAM de errores de tensores.
+**🛠️ Herramientas (Tools):** Nodos dedicados (`ResTool 8x, 16x, 32x, 64x`) para calcular resoluciones estrictamente divisibles y proteger la VRAM. Selecciona tu formato (ej. 9:16) y tu resolución base (ej. 1080). El nodo correspondiente aplicará una restricción matemática estricta hacia abajo para garantizar que el ancho y el alto sean perfectamente divisibles por la arquitectura de tu modelo, protegiendo tu VRAM de errores de tensores.
 
 ### 🎞️ Video (Ensamblaje y Validación)
 5. **🕵️ Video Analyzer + Audio (`VideoAnalyzerWithAudio`)**: Es el "Explorador" de la máquina. Escanea el vídeo usando OpenCV para detectar frames con rostros nítidos, extrae la pista de audio íntegra de forma pura mediante Torchaudio, y genera un visual **Preview del Frame de Referencia** en su propia interfaz. Emite dicho frame de referencia en formato de imagen (IMAGE) para el resto del flujo de trabajo.
