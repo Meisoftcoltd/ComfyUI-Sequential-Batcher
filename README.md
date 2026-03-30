@@ -59,7 +59,7 @@ Nodos dedicados para calcular resoluciones estrictamente divisibles y proteger t
 - **`🎬 ResTool 64x (Hunyuan)`**: Múltiplos de 64. Base nativa ~921,600 px.
 
 **Todas las herramientas comparten la misma interfaz:**
-- **Inputs:** `aspect_ratio` (ej. 16:9, 9:16), `base_resolution` (INT)
+- **Inputs:** `aspect_ratio` (ej. 16:9, 9:16), `base_resolution` (Campo numérico INT libre, puedes escribir el valor exacto que necesites, ej. 832 o 1024)
 - **Outputs:** `width` (INT), `height` (INT), `debug_info` (STRING)
 
 > **🛡️ Escudo de Megapíxeles (NUEVO en v1.5.1):** Cada herramienta conoce el "suelo de entrenamiento" (Training Floor) de su modelo. Si solicitas una resolución extrema que cae por debajo del área mínima vital, el nodo escalará primero la resolución proporcionalmente hacia arriba para proteger la generación contra artefactos, y luego aplicará la divisibilidad estricta.

@@ -59,7 +59,7 @@ Dedicated nodes to calculate strictly divisible safe resolutions, shielding your
 - **`🎬 ResTool 64x (Hunyuan)`**: Multiples of 64. Native base ~921,600 px.
 
 **All Tools share the same interface:**
-- **Inputs:** `aspect_ratio` (e.g. 16:9, 9:16), `base_resolution` (INT)
+- **Inputs:** `aspect_ratio` (e.g., 16:9, 9:16), `base_resolution` (Free INT numerical field, write the exact value you need, e.g., 832 or 1024)
 - **Outputs:** `width` (INT), `height` (INT), `debug_info` (STRING)
 
 > **🛡️ Megapixel Shield (NEW in v1.5.1):** Each tool knows its model's "training floor" area. If you request an extreme aspect ratio that falls below this vital threshold, the node will first scale the resolution up proportionally to protect the generation against melting artifacts, and only then apply strict divisibility.

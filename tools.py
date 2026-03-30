@@ -8,7 +8,8 @@ class BaseResolutionTool:
         return {
             "required": {
                 "aspect_ratio": (["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "3:2", "2:3"],),
-                "base_resolution": (["256", "360", "480", "512", "720", "768", "1024", "1080", "1280", "1440", "1920", "2048", "2160"], {"default": "1024"}),
+                # 💡 Cambio clave: Dejamos de usar combo y pasamos a un campo INT libre
+                "base_resolution": ("INT", {"default": 1024, "min": 128, "max": 8192, "step": 8}),
             }
         }
 
@@ -20,7 +21,7 @@ class BaseResolutionTool:
     def get_resolution(self, aspect_ratio, base_resolution):
         div = self.DIVISOR
         min_pixels = getattr(self, "MIN_PIXELS", 0)
-        longest_side = int(base_resolution)
+        longest_side = int(base_resolution) # Mantenemos el casting por seguridad
 
         w_str, h_str = aspect_ratio.split(':')
         w_ratio = float(w_str)
