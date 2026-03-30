@@ -27,6 +27,9 @@ The system is built around three major categories:
 4. **📤 Session Image Sender (`SessionImageSender`)**: Extracts the final image of a batch and secures it in system memory for the next cycle.
    - **💾 Keyframe Dumping (New in v1.1.0!):** Now receives the current index and performs a safety dump to the hard drive, progressively saving `keyframe_XXX.png` every cycle to prevent data loss.
 
+### 🛠️ Tools
+A suite of dedicated nodes (ResTool 8x, 16x, 32x, 64x) to calculate safe resolutions instantly. Select your aspect ratio (e.g., 9:16) and base resolution (e.g., 1080). The specific node will apply a strict downward mathematical constraint to guarantee that the width and height are perfectly divisible by your model's architecture, shielding your VRAM from tensor errors.
+
 ### 🎞️ Video (Assembly and Validation)
 5. **🕵️ Video Analyzer + Audio (`VideoAnalyzerWithAudio`)**: The "Explorer" of the machine. Scans the video using OpenCV to detect frames with sharp faces, extracts the pure, intact audio track using Torchaudio, and generates a **Reference Frame Visual Preview** on its own interface. It outputs this reference frame as an IMAGE format for the rest of the workflow.
 6. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: The "Brain". Receives information from the Explorer and calculates frame cuts (chunk, skip) asymmetrically. If provided with a `safe_faces_list`, it forces cuts on frames with recognizable faces to maintain fluid continuity. Now includes a **Dynamic ±10% Margin** to absorb video remainders at the final boundary, ensuring all cycles maintain a stable duration without generating inefficient tail ends.
