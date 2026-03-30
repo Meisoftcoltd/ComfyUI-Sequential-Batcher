@@ -31,6 +31,8 @@ The system is built around three major categories:
 ### 🛠️ Tools
 **🛠️ Tools Suite:** Dedicated nodes (`ResTool 8x, 16x, 32x, 64x`) to calculate strictly divisible safe resolutions, shielding VRAM. Select your aspect ratio (e.g., 9:16) and base resolution (e.g., 1080). The specific node will apply a strict downward mathematical constraint to guarantee that the width and height are perfectly divisible by your model's architecture, shielding your VRAM from tensor errors.
 
+> **🛡️ Megapixel Shield (NEW in v1.5.1):** Each tool knows its model's "training floor" (e.g., WanVideo needs at least ~400k pixels). If you request an extreme resolution that falls below this vital threshold (which would cause artifacts or melted images), the node will automatically scale the width and height proportionally to save the generation before applying strict divisibility.
+
 ### 🎞️ Video (Assembly and Validation)
 5. **🕵️ Video Analyzer + Audio (`VideoAnalyzerWithAudio`)**: The "Explorer" of the machine. Scans the video using OpenCV to detect frames with sharp faces, extracts the pure, intact audio track using Torchaudio, and generates a **Reference Frame Visual Preview** on its own interface. It outputs this reference frame as an IMAGE format for the rest of the workflow.
 6. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: The "Brain". Receives information from the Explorer and calculates frame cuts (chunk, skip) asymmetrically. If provided with a `safe_faces_list`, it forces cuts on frames with recognizable faces to maintain fluid continuity. Now includes a **Dynamic ±10% Margin** to absorb video remainders at the final boundary, ensuring all cycles maintain a stable duration without generating inefficient tail ends.

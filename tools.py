@@ -1,6 +1,7 @@
+import math
 from . import register_node
 
-# 🧠 Clase Base Invisible (El molde matemático)
+# 🧠 Clase Base Invisible (El molde matemático por Megapíxeles)
 class BaseResolutionTool:
     @classmethod
     def INPUT_TYPES(cls):
@@ -18,48 +19,66 @@ class BaseResolutionTool:
 
     def get_resolution(self, aspect_ratio, base_resolution):
         div = self.DIVISOR
+        min_pixels = getattr(self, "MIN_PIXELS", 0)
         longest_side = int(base_resolution)
 
         w_str, h_str = aspect_ratio.split(':')
         w_ratio = float(w_str)
         h_ratio = float(h_str)
-
-        # Matemática segura hacia abajo (Strictly Down)
-        actual_longest = max(div, (longest_side // div) * div)
-
-        if w_ratio >= h_ratio:
-            ideal_w = actual_longest
-            ideal_h = ideal_w * (h_ratio / w_ratio)
-            width = ideal_w
-            height = max(div, (int(ideal_h) // div) * div)
-        else:
-            ideal_h = actual_longest
-            ideal_w = ideal_h * (w_ratio / h_ratio)
-            height = ideal_h
-            width = max(div, (int(ideal_w) // div) * div)
-
-        debug_msg = f"{width}x{height} (Div {div})"
+        ratio = w_ratio / h_ratio
 
         print(f"\n{'='*50}")
         print(f"🛠️ [DEBUG] NODO: Resolution Tool {div}x")
-        print(f"   -> Petición: {base_resolution}p | Ratio {aspect_ratio}")
-        print(f"   -> 🎯 Resultado Seguro: Ancho {width} | Alto {height}")
+        print(f"   -> Petición Original: Lado mayor {longest_side}px | Ratio {aspect_ratio}")
+
+        # 1. Calcular resolución inicial teórica
+        if w_ratio >= h_ratio:
+            ideal_w = longest_side
+            ideal_h = ideal_w / ratio
+        else:
+            ideal_h = longest_side
+            ideal_w = ideal_h * ratio
+
+        current_pixels = ideal_w * ideal_h
+
+        # 2. 🛡️ Protección de Suelo por ÁREA TOTAL (Training Floor)
+        if current_pixels < min_pixels:
+            print(f"   -> ⚠️ ALERTA: La resolución pedida ({int(current_pixels)} píxeles) es inferior al mínimo vital del modelo ({min_pixels} píxeles).")
+            print(f"   -> 🛡️ Escalando proporcionalmente para evitar artefactos...")
+            # Factor de escala basado en área
+            scale_factor = math.sqrt(min_pixels / current_pixels)
+            ideal_w *= scale_factor
+            ideal_h *= scale_factor
+
+        # 3. Ajuste final de divisibilidad estricta
+        # Usamos round para asegurar que nos quedamos lo más cerca posible del área ideal
+        width = max(div, round(ideal_w / div) * div)
+        height = max(div, round(ideal_h / div) * div)
+
+        debug_msg = f"{width}x{height} (Div {div})"
+
+        print(f"   -> 🎯 Resultado Final Seguro: Ancho {width} | Alto {height} | Píxeles totales: {width*height}")
         print(f"{'='*50}\n")
 
         return (width, height, debug_msg)
 
+# 📦 Nodos Específicos Blindados por Píxeles
 @register_node
 class ResTool8x(BaseResolutionTool):
     DIVISOR = 8
+    MIN_PIXELS = 262144  # SD1.5 (Equivale a 512x512)
 
 @register_node
 class ResTool16x(BaseResolutionTool):
     DIVISOR = 16
+    MIN_PIXELS = 1048576 # SDXL (Equivale a 1024x1024)
 
 @register_node
 class ResTool32x(BaseResolutionTool):
     DIVISOR = 32
+    MIN_PIXELS = 399360  # WanVideo (Equivale a 832x480)
 
 @register_node
 class ResTool64x(BaseResolutionTool):
     DIVISOR = 64
+    MIN_PIXELS = 921600  # Hunyuan (Equivale a 1280x720)
