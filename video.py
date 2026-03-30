@@ -1,4 +1,5 @@
 import os
+import math
 import torch
 import torchaudio
 import folder_paths
@@ -6,15 +7,104 @@ import nodes
 import time
 from . import register_node
 
+# Intento de carga de OpenCV para el Director de Fotografía
+try:
+    import cv2
+    import numpy as np
+    HAS_OPENCV = True
+except ImportError:
+    HAS_OPENCV = False
+
+@register_node
+class VideoAnalyzerWithAudio:
+    @classmethod
+    def INPUT_TYPES(cls):
+        vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
+        if vhs_class:
+            inputs = vhs_class.INPUT_TYPES()
+            req = inputs.get("required", {})
+            # Añadimos nuestros interruptores al nodo de VHS
+            req["use_face_detector"] = ("BOOLEAN", {"default": True})
+            req["blur_threshold"] = ("FLOAT", {"default": 100.0, "min": 0.0, "max": 1000.0, "step": 1.0})
+            return {"required": req}
+        return {"required": {"video": ("STRING", {"image_upload": True}), "use_face_detector": ("BOOLEAN", {"default": True}), "blur_threshold": ("FLOAT", {"default": 100.0})}}
+
+    RETURN_TYPES = ("STRING", "INT", "AUDIO", "FACE_CUTS")
+    RETURN_NAMES = ("video_name", "total_frames", "source_audio", "safe_faces_list")
+    FUNCTION = "analyze"
+    CATEGORY = "🔁 Sequential Batcher/Video"
+
+    def analyze(self, video, use_face_detector, blur_threshold, **kwargs):
+        video_name = video[0] if isinstance(video, (list, tuple)) else video
+        video_path = folder_paths.get_annotated_filepath(video_name)
+
+        print(f"\n{'='*50}")
+        print(f"🕵️ [DEBUG] NODO: Video Analyzer (Explorador)")
+        print(f"   -> Archivo: {video_name}")
+
+        # 1. Extracción de Audio Íntegro
+        source_audio = None
+        try:
+            waveform, sample_rate = torchaudio.load(video_path)
+            source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
+            print(f"   -> 🎵 Audio extraído correctamente ({sample_rate}Hz)")
+        except:
+            print(f"   -> ⚠️ Sin audio o error al extraer.")
+
+        # 2. Escaneo de Frames y Rostros
+        frame_count = 0
+        safe_faces = []
+
+        if not HAS_OPENCV and use_face_detector:
+            print("   -> ❌ ERROR: OpenCV no está instalado. Ejecuta: pip install opencv-python")
+            use_face_detector = False
+
+        if HAS_OPENCV:
+            cap = cv2.VideoCapture(video_path)
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            print(f"   -> 🎞️ Total Frames detectados: {frame_count}")
+
+            if use_face_detector:
+                print(f"   -> 🤖 Iniciando escaneo de rostros (Umbral de nitidez: {blur_threshold})...")
+                cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+                face_cascade = cv2.CascadeClassifier(cascade_path)
+
+                idx = 0
+                while True:
+                    ret, frame = cap.read()
+                    if not ret: break
+
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    # Varianza de Laplace para descartar motion blur
+                    variance = cv2.Laplacian(gray, cv2.CV_64F).var()
+
+                    if variance > blur_threshold:
+                        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+                        if len(faces) > 0:
+                            safe_faces.append(idx)
+                    idx += 1
+                cap.release()
+                print(f"   -> ✅ Escaneo completado. Encontrados {len(safe_faces)} frames nítidos con rostros.")
+            else:
+                cap.release()
+                print(f"   -> 🤖 Escaneo de rostros DESACTIVADO.")
+
+        print(f"{'='*50}\n")
+        return (video_name, frame_count, source_audio, safe_faces)
+
 @register_node
 class AutoLoopCalculator:
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
+                "source_frame_count": ("INT", {"forceInput": True}),
                 "target_frames_per_loop": ("INT", {"default": 50, "min": 1, "max": 10000}),
                 "select_every_nth": ("INT", {"default": 1, "min": 1, "max": 100}),
                 "current_loop_index": ("INT", {"forceInput": True}),
+            },
+            "optional": {
+                "safe_faces_list": ("FACE_CUTS", {"forceInput": True}),
             }
         }
 
@@ -23,142 +113,56 @@ class AutoLoopCalculator:
     FUNCTION = "calculate"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
-    def calculate(self, target_frames_per_loop, select_every_nth, current_loop_index):
+    def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index, safe_faces_list=None):
         import math
         from . import loop
 
-        # Guardamos la config para que el Cargador la use luego en el Ciclo 0
-        loop.global_target_frames = target_frames_per_loop
-        loop.global_stride = select_every_nth
+        if source_frame_count <= 0 or target_frames_per_loop <= 0:
+            loop.global_total_loops = 1
+            return (max(1, source_frame_count), 0, select_every_nth)
 
-        source_frames = loop.global_source_frame_count
+        # Calculamos la meta en frames ORIGINALES para no romper el stride
+        target_original = target_frames_per_loop * select_every_nth
+        cuts = [0]
+        current_pos = 0
 
-        # CICLO 0: Disparo a ciegas (El Explorador)
-        if current_loop_index == 0 or source_frames == 0:
-            print(f"\n📊 [Auto Calculator] Ciclo 0 (Explorador). Solicitando {target_frames_per_loop} frames a ciegas.")
-            return (target_frames_per_loop, 0, select_every_nth)
+        print(f"\n{'='*50}")
+        print(f"📊 [DEBUG] NODO: Auto Loop Calculator (Cerebro)")
 
-        # CICLOS > 0: Matemática proporcional para el resto del vídeo
-        effective_total = math.ceil(source_frames / select_every_nth)
+        while current_pos + target_original < source_frame_count:
+            ideal_cut = current_pos + target_original
+            best_cut = ideal_cut
 
-        if effective_total <= target_frames_per_loop:
-            return (target_frames_per_loop, 0, select_every_nth)
-
-        remaining_effective = effective_total - target_frames_per_loop
-        remaining_loops = math.ceil(remaining_effective / target_frames_per_loop)
-
-        base_frames = remaining_effective // remaining_loops
-        remainder = remaining_effective % remaining_loops
-
-        plan = [target_frames_per_loop] # El Ciclo 0 ya se llevó su parte
-        for i in range(remaining_loops):
-            plan.append(base_frames + (1 if i < remainder else 0))
-
-        safe_index = min(current_loop_index, len(plan) - 1)
-        chunk_frames = plan[safe_index]
-
-        effective_skip = sum(plan[:safe_index])
-        skip_frames = effective_skip * select_every_nth
-
-        print(f"\n📊 [Auto Calculator] Video Original: {source_frames} frames | Efectivos: {effective_total}")
-        print(f"   -> Plan maestro: {plan}")
-        print(f"   -> 🚀 Ciclo {current_loop_index}: Cargando {chunk_frames} frames (Saltando {skip_frames})")
-
-        return (chunk_frames, skip_frames, select_every_nth)
-
-@register_node
-class LoadVideoWithSourceAudio:
-    @classmethod
-    def INPUT_TYPES(cls):
-        vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
-        if vhs_class:
-            return vhs_class.INPUT_TYPES()
-        return {"required": {"video": ("STRING", {"image_upload": True})}}
-
-    RETURN_TYPES = ("IMAGE", "INT", "AUDIO", "VHS_VIDEOINFO", "AUDIO", "IMAGE")
-    RETURN_NAMES = ("IMAGE", "frame_count", "audio", "video_info", "source_audio", "first_frame")
-    FUNCTION = "load_video_with_audio"
-    CATEGORY = "🔁 Sequential Batcher/Video"
-
-    @classmethod
-    def IS_CHANGED(cls, **kwargs):
-        return time.time()
-
-    @classmethod
-    def VALIDATE_INPUTS(cls, video, **kwargs):
-        path = folder_paths.get_annotated_filepath(video)
-        return True if os.path.exists(path) else f"Archivo no encontrado: {path}"
-
-    def load_video_with_audio(self, **kwargs):
-        vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
-        if not vhs_class:
-            raise Exception("❌ VideoHelperSuite no está instalado.")
-
-        vhs_instance = vhs_class()
-
-        vhs_inputs = vhs_class.INPUT_TYPES()
-        allowed_keys = set()
-        for cat in ["required", "optional", "hidden"]:
-            if cat in vhs_inputs:
-                allowed_keys.update(vhs_inputs[cat].keys())
-
-        vhs_kwargs = {k: v for k, v in kwargs.items() if k in allowed_keys}
-        vhs_output = vhs_instance.load_video(**vhs_kwargs)
-
-        if isinstance(vhs_output, dict):
-            res = list(vhs_output.get("result", []))
-            ui = vhs_output.get("ui", {})
-        else:
-            res = list(vhs_output)
-            ui = {}
-
-        # 🎯 NUEVO: INTERCEPTACIÓN DEL TOTAL DE FRAMES
-        video_info_dict = res[3] if len(res) > 3 else {}
-        source_frame_count = video_info_dict.get("source_frame_count", 0) if isinstance(video_info_dict, dict) else 0
-
-        if source_frame_count > 0:
-            from . import loop
-            import math
-            loop.global_source_frame_count = source_frame_count
-
-            # Solo fijamos el número total de ciclos durante el Ciclo 0
-            if loop.global_loop_index == 0:
-                target = loop.global_target_frames
-                stride = loop.global_stride
-                eff_total = math.ceil(source_frame_count / stride)
-
-                if eff_total <= target:
-                    loop.global_total_loops = 1
+            if safe_faces_list and len(safe_faces_list) > 0:
+                # Buscar el rostro más cercano al corte ideal, buscando hacia atrás
+                min_acceptable = current_pos + int(target_original * 0.5)
+                valid_cuts = [f for f in safe_faces_list if min_acceptable <= f <= ideal_cut]
+                if valid_cuts:
+                    best_cut = max(valid_cuts)
+                    print(f"   -> ✂️ Corte Inteligente en frame original: {best_cut} (El ideal era {ideal_cut})")
                 else:
-                    remaining = eff_total - target
-                    rem_loops = math.ceil(remaining / target)
-                    loop.global_total_loops = 1 + rem_loops
+                    print(f"   -> ⚠️ Sin rostros cerca de {ideal_cut}. Forzando corte matemático perfecto.")
 
-                print(f"🎥 [Video Loader] Interceptado: {source_frame_count} frames. Total Loops fijado en: {loop.global_total_loops}")
+            cuts.append(best_cut)
+            current_pos = best_cut
 
-        raw_video = kwargs.get("video")
-        video_name = raw_video[0] if isinstance(raw_video, (list, tuple)) else raw_video
-        video_path = folder_paths.get_annotated_filepath(video_name) if video_name else ""
+        cuts.append(source_frame_count)
+        total_loops = len(cuts) - 1
+        loop.global_total_loops = total_loops
 
-        source_audio = None
-        try:
-            if os.path.exists(video_path):
-                waveform, sample_rate = torchaudio.load(video_path)
-                source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
-        except Exception as e:
-            print(f"⚠️ [LoadVideo] Error extrayendo source_audio: {e}")
+        safe_index = min(current_loop_index, total_loops - 1)
+        start_frame = cuts[safe_index]
+        end_frame = cuts[safe_index + 1]
 
-        first_frame = None
-        if len(res) > 0 and res[0] is not None:
-            first_frame = res[0][0:1]
+        original_chunk_length = end_frame - start_frame
+        effective_chunk_frames = math.ceil(original_chunk_length / select_every_nth)
+        skip_frames = start_frame
 
-        if len(res) >= 4:
-            res = [res[0], res[1], res[2], res[3], source_audio, first_frame]
-        else:
-            res.append(source_audio)
-            res.append(first_frame)
+        print(f"   -> 🎬 Plan de Cortes (Frames Originales): {cuts}")
+        print(f"   -> 🚀 Ciclo {current_loop_index}: Generando {effective_chunk_frames} frames efectivos (Saltando los primeros {skip_frames} originales)")
+        print(f"{'='*50}\n")
 
-        return {"ui": ui, "result": tuple(res)}
+        return (effective_chunk_frames, skip_frames, select_every_nth)
 
 @register_node
 class IncrementalVideoStitcher:
