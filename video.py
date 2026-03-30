@@ -19,22 +19,47 @@ except ImportError:
 class VideoAnalyzerWithAudio:
     @classmethod
     def INPUT_TYPES(cls):
+        # 💡 TRUCO: Robamos solo el widget de video (con su botón Upload) de VHS
         vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
+        video_input = ("STRING", {"video_upload": True}) # Fallback por defecto
         if vhs_class:
-            inputs = vhs_class.INPUT_TYPES()
-            req = inputs.get("required", {})
-            # Añadimos nuestros interruptores al nodo de VHS
-            req["use_face_detector"] = ("BOOLEAN", {"default": True})
-            req["blur_threshold"] = ("FLOAT", {"default": 100.0, "min": 0.0, "max": 1000.0, "step": 1.0})
-            return {"required": req}
-        return {"required": {"video": ("STRING", {"image_upload": True}), "use_face_detector": ("BOOLEAN", {"default": True}), "blur_threshold": ("FLOAT", {"default": 100.0})}}
+            vhs_inputs = vhs_class.INPUT_TYPES()
+            if "video" in vhs_inputs.get("required", {}):
+                video_input = vhs_inputs["required"]["video"]
 
-    RETURN_TYPES = ("STRING", "INT", "AUDIO", "FACE_CUTS")
-    RETURN_NAMES = ("video_name", "total_frames", "source_audio", "safe_faces_list")
+        return {
+            "required": {
+                "video": video_input,
+                "reference_frame_idx": ("INT", {"default": 0, "min": 0, "max": 100000, "step": 1}),
+                "use_face_detector": ("BOOLEAN", {"default": True}),
+                "blur_threshold": ("FLOAT", {"default": 100.0, "min": 0.0, "max": 1000.0, "step": 1.0}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "INT", "AUDIO", "FACE_CUTS", "IMAGE")
+    RETURN_NAMES = ("video_name", "total_frames", "source_audio", "safe_faces_list", "reference_frame")
+    OUTPUT_NODE = True  # Obligatorio para que ComfyUI renderice la preview
     FUNCTION = "analyze"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
-    def analyze(self, video, use_face_detector, blur_threshold, **kwargs):
+    @classmethod
+    def IS_CHANGED(cls, video, **kwargs):
+        # Romper el caché si el archivo ha sido modificado en disco
+        video_name = video[0] if isinstance(video, (list, tuple)) else video
+        video_path = folder_paths.get_annotated_filepath(video_name)
+        if os.path.exists(video_path):
+            return os.path.getmtime(video_path)
+        return time.time()
+
+    @classmethod
+    def VALIDATE_INPUTS(cls, video, **kwargs):
+        video_name = video[0] if isinstance(video, (list, tuple)) else video
+        video_path = folder_paths.get_annotated_filepath(video_name)
+        if not os.path.exists(video_path):
+            return f"❌ El archivo de video no existe en: {video_path}"
+        return True
+
+    def analyze(self, video, reference_frame_idx, use_face_detector, blur_threshold, **kwargs):
         video_name = video[0] if isinstance(video, (list, tuple)) else video
         video_path = folder_paths.get_annotated_filepath(video_name)
 
@@ -51,31 +76,53 @@ class VideoAnalyzerWithAudio:
         except:
             print(f"   -> ⚠️ Sin audio o error al extraer.")
 
-        # 2. Escaneo de Frames y Rostros
+        # 2. Escaneo de OpenCV (Frames, Rostros y Referencia)
         frame_count = 0
         safe_faces = []
+        ref_tensor = torch.zeros((1, 64, 64, 3), dtype=torch.float32) # Tensor negro de seguridad
+        ui_result = {}
 
-        if not HAS_OPENCV and use_face_detector:
+        if not HAS_OPENCV:
             print("   -> ❌ ERROR: OpenCV no está instalado. Ejecuta: pip install opencv-python")
-            use_face_detector = False
-
-        if HAS_OPENCV:
+        else:
             cap = cv2.VideoCapture(video_path)
             frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             print(f"   -> 🎞️ Total Frames detectados: {frame_count}")
 
+            # Extraer el Frame de Referencia específico
+            safe_ref_idx = min(reference_frame_idx, max(0, frame_count - 1))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, safe_ref_idx)
+            ret, ref_frame = cap.read()
+
+            if ret:
+                # Convertir BGR a RGB para ComfyUI
+                ref_frame_rgb = cv2.cvtColor(ref_frame, cv2.COLOR_BGR2RGB)
+                # Convertir a Tensor (1, H, W, 3)
+                ref_tensor = torch.from_numpy(ref_frame_rgb).float() / 255.0
+                ref_tensor = ref_tensor.unsqueeze(0)
+                print(f"   -> 🖼️ Frame de referencia extraído (Índice: {safe_ref_idx})")
+
+                # Generar imagen temporal para el Preview de la UI
+                import random
+                from PIL import Image
+                preview_dir = folder_paths.get_temp_directory()
+                preview_name = f"preview_ref_{random.randint(1000, 9999)}.png"
+                Image.fromarray(ref_frame_rgb).save(os.path.join(preview_dir, preview_name))
+                ui_result = {"images": [{"filename": preview_name, "subfolder": "", "type": "temp"}]}
+
+            # Escaneo de Rostros
             if use_face_detector:
-                print(f"   -> 🤖 Iniciando escaneo de rostros (Umbral de nitidez: {blur_threshold})...")
+                print(f"   -> 🤖 Iniciando escaneo de rostros (Umbral: {blur_threshold})...")
                 cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
                 face_cascade = cv2.CascadeClassifier(cascade_path)
 
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0) # Volver al inicio
                 idx = 0
                 while True:
                     ret, frame = cap.read()
                     if not ret: break
 
                     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                    # Varianza de Laplace para descartar motion blur
                     variance = cv2.Laplacian(gray, cv2.CV_64F).var()
 
                     if variance > blur_threshold:
@@ -83,14 +130,16 @@ class VideoAnalyzerWithAudio:
                         if len(faces) > 0:
                             safe_faces.append(idx)
                     idx += 1
-                cap.release()
-                print(f"   -> ✅ Escaneo completado. Encontrados {len(safe_faces)} frames nítidos con rostros.")
+                print(f"   -> ✅ Encontrados {len(safe_faces)} frames nítidos con rostros.")
             else:
-                cap.release()
                 print(f"   -> 🤖 Escaneo de rostros DESACTIVADO.")
 
+            cap.release()
+
         print(f"{'='*50}\n")
-        return (video_name, frame_count, source_audio, safe_faces)
+
+        # Devolvemos el diccionario con la clave 'ui' para que se pinte la preview en el lienzo
+        return {"ui": ui_result, "result": (video_name, frame_count, source_audio, safe_faces, ref_tensor)}
 
 @register_node
 class AutoLoopCalculator:
