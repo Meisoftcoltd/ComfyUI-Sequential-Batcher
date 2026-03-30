@@ -1,4 +1,4 @@
-# ComfyUI Sequential Batcher (v1.4.3)
+# ComfyUI Sequential Batcher (v1.5.0)
 
 A highly specialized suite of custom nodes for ComfyUI designed for **Recursive Self-Queuing** and autonomous sequential processing. This architecture minimizes VRAM usage by processing heavy tasks (like video generation) sequentially, batch-by-batch, orchestrated entirely from within the graph.
 
@@ -26,9 +26,10 @@ The system is built around three major categories:
 3. **📥 Session Image Receiver (`SessionImageReceiver`)**: Retrieves the initial image or the last generated frame from the previous cycle, intelligently detecting the start of a RAM session.
 4. **📤 Session Image Sender (`SessionImageSender`)**: Extracts the final image of a batch and secures it in system memory for the next cycle.
    - **💾 Keyframe Dumping (New in v1.1.0!):** Now receives the current index and performs a safety dump to the hard drive, progressively saving `keyframe_XXX.png` every cycle to prevent data loss.
+   - **✨ Dynamic Engine:** The `Session Image Sender` dynamically truncates generated tensors if the AI hallucination occurs (e.g., character turns their back), and updates the global accumulator so the `Auto Loop Calculator` accurately readjusts the next extraction cycle, ensuring flawless identity continuity without desyncing audio.
 
 ### 🛠️ Tools
-A suite of dedicated nodes (ResTool 8x, 16x, 32x, 64x) to calculate safe resolutions instantly. Select your aspect ratio (e.g., 9:16) and base resolution (e.g., 1080). The specific node will apply a strict downward mathematical constraint to guarantee that the width and height are perfectly divisible by your model's architecture, shielding your VRAM from tensor errors.
+**🛠️ Tools Suite:** Dedicated nodes (`ResTool 8x, 16x, 32x, 64x`) to calculate strictly divisible safe resolutions, shielding VRAM. Select your aspect ratio (e.g., 9:16) and base resolution (e.g., 1080). The specific node will apply a strict downward mathematical constraint to guarantee that the width and height are perfectly divisible by your model's architecture, shielding your VRAM from tensor errors.
 
 ### 🎞️ Video (Assembly and Validation)
 5. **🕵️ Video Analyzer + Audio (`VideoAnalyzerWithAudio`)**: The "Explorer" of the machine. Scans the video using OpenCV to detect frames with sharp faces, extracts the pure, intact audio track using Torchaudio, and generates a **Reference Frame Visual Preview** on its own interface. It outputs this reference frame as an IMAGE format for the rest of the workflow.

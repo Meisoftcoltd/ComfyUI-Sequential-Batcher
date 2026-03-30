@@ -166,68 +166,46 @@ class AutoLoopCalculator:
         import math
         from . import loop
 
-        if source_frame_count <= 0 or target_frames_per_loop <= 0:
-            loop.global_total_loops = 1
-            return (max(1, source_frame_count), 0, select_every_nth)
+        loop.global_source_frame_count = source_frame_count
+        loop.global_select_every_nth = select_every_nth
 
-        # 1. Parámetros base y margen del ±10%
+        current_pos = loop.global_accumulated_frames
+
+        print(f"\n{'='*50}")
+        print(f"📊 [DEBUG] NODO: Auto Loop Calculator (Motor Dinámico)")
+        print(f"   -> Posición en el timeline original: {current_pos} / {source_frame_count}")
+
+        if current_pos >= source_frame_count:
+            return (1, current_pos, select_every_nth)
+
+        frames_left = source_frame_count - current_pos
         target_original = target_frames_per_loop * select_every_nth
         margin = max(1, int(target_original * 0.10))
+
         min_chunk = target_original - margin
         max_chunk = target_original + margin
 
-        cuts = [0]
-        current_pos = 0
-
-        print(f"\n{'='*50}")
-        print(f"📊 [DEBUG] NODO: Auto Loop Calculator (Cerebro)")
-        print(f"   -> Target: {target_original} | Margen 10%: {min_chunk} a {max_chunk} frames")
-
-        # 2. Búsqueda de cortes
-        while current_pos < source_frame_count:
-            frames_left = source_frame_count - current_pos
-
-            # Si lo que queda cabe en el margen máximo, cerramos el último bloque
-            if frames_left <= max_chunk:
-                cuts.append(source_frame_count)
-                print(f"   -> 🧮 Resto final ({frames_left} frames) absorbido en el límite máximo.")
-                break
-
+        if frames_left <= max_chunk:
+            best_cut = source_frame_count
+            print(f"   -> 🧮 Absorbiendo resto final: meta fijada en frame {best_cut}")
+        else:
             ideal_cut = current_pos + target_original
             min_cut = current_pos + min_chunk
-            max_cut = current_pos + max_chunk
+            max_cut = min(current_pos + max_chunk, source_frame_count)
 
-            # Asegurar que no nos pasamos del total
-            max_cut = min(max_cut, source_frame_count)
             best_cut = ideal_cut
-
             if safe_faces_list and len(safe_faces_list) > 0:
                 valid_cuts = [f for f in safe_faces_list if min_cut <= f <= max_cut]
                 if valid_cuts:
                     best_cut = min(valid_cuts, key=lambda x: abs(x - ideal_cut))
-                    print(f"   -> ✂️ Corte Inteligente: {best_cut} (Ideal: {ideal_cut} | Ventana: {min_cut}-{max_cut})")
+                    print(f"   -> ✂️ Corte Inteligente proyectado: {best_cut} (Ventana: {min_cut}-{max_cut})")
                 else:
-                    print(f"   -> ⚠️ Sin caras en ventana {min_cut}-{max_cut}. Forzando ideal: {ideal_cut}")
-            else:
-                print(f"   -> 🧮 Corte matemático: {ideal_cut}")
+                    print(f"   -> ⚠️ Sin caras en ventana. Forzando ideal: {ideal_cut}")
 
-            cuts.append(best_cut)
-            current_pos = best_cut
+        effective_chunk_frames = math.ceil((best_cut - current_pos) / select_every_nth)
+        skip_frames = current_pos
 
-        total_loops = len(cuts) - 1
-        loop.global_total_loops = total_loops
-
-        # 3. Extracción del ciclo actual
-        safe_index = min(current_loop_index, total_loops - 1)
-        start_frame = cuts[safe_index]
-        end_frame = cuts[safe_index + 1]
-
-        original_chunk_length = end_frame - start_frame
-        effective_chunk_frames = math.ceil(original_chunk_length / select_every_nth)
-        skip_frames = start_frame
-
-        print(f"   -> 🎬 Plan de Cortes: {cuts}")
-        print(f"   -> 🚀 Ciclo {current_loop_index}: Generando {effective_chunk_frames} frames efectivos (Saltando {skip_frames})")
+        print(f"   -> 🚀 Ciclo {current_loop_index}: Solicitando {effective_chunk_frames} frames efectivos (Saltando {skip_frames})")
         print(f"{'='*50}\n")
 
         return (effective_chunk_frames, skip_frames, select_every_nth)
@@ -251,26 +229,24 @@ class IncrementalVideoStitcher:
 
     def stitch(self, images, audio, current_loop_index):
         from . import loop
-        total_loops = loop.global_total_loops # Leemos la variable global
+        import os, folder_paths, torch
 
         cache_dir = os.path.join(folder_paths.get_temp_directory(), "wan_stitcher_cache")
         os.makedirs(cache_dir, exist_ok=True)
 
-        # 1. Guardar el lote completo actual en disco
         path = os.path.join(cache_dir, f"batch_{current_loop_index:04d}.pt")
         torch.save(images.cpu(), path)
-        print(f"🎞️ [Stitcher] Lote {current_loop_index} guardado en disco.")
+        print(f"🎞️ [Stitcher] Lote {current_loop_index} guardado en disco ({images.shape[0]} frames).")
 
-        if current_loop_index < total_loops - 1:
-            # 🛠️ TRUCO MAESTRO: En lugar de un frame negro, enviamos el primer frame real del lote.
-            # Mantiene los cables vivos y establece la resolución correcta para RIFE/Upscale.
+        is_final = loop.global_accumulated_frames >= loop.global_source_frame_count
+
+        if not is_final:
             preview_frame = images[0:1]
             return (preview_frame, None)
 
-        # 2. Ciclo final: Ensamblar todos los lotes
         print(f"📦 [Stitcher] Ensamblando todos los lotes de vídeo...")
         all_tensors = []
-        for i in range(total_loops):
+        for i in range(current_loop_index + 1):
             p = os.path.join(cache_dir, f"batch_{i:04d}.pt")
             if os.path.exists(p):
                 all_tensors.append(torch.load(p))
@@ -278,6 +254,6 @@ class IncrementalVideoStitcher:
                 except: pass
 
         final_images = torch.cat(all_tensors, dim=0)
-        print(f"✅ [Stitcher] Vídeo completado: {final_images.shape[0]} frames.")
+        print(f"✅ [Stitcher] Vídeo completado: {final_images.shape[0]} frames ensamblados.")
 
         return (final_images, audio)

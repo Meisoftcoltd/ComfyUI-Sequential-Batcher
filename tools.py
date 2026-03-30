@@ -24,7 +24,7 @@ class BaseResolutionTool:
         w_ratio = float(w_str)
         h_ratio = float(h_str)
 
-        # Matemática segura hacia abajo (Strictly Down) simulando tabla memorizada
+        # Matemática segura hacia abajo (Strictly Down)
         actual_longest = max(div, (longest_side // div) * div)
 
         if w_ratio >= h_ratio:
@@ -48,7 +48,6 @@ class BaseResolutionTool:
 
         return (width, height, debug_msg)
 
-# 📦 Los 4 Nodos Visibles para el Usuario
 @register_node
 class ResTool8x(BaseResolutionTool):
     DIVISOR = 8
