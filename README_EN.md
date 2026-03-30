@@ -1,4 +1,4 @@
-# ComfyUI Sequential Batcher (v1.4.1)
+# ComfyUI Sequential Batcher (v1.4.3)
 
 A highly specialized suite of custom nodes for ComfyUI designed for **Recursive Self-Queuing** and autonomous sequential processing. This architecture minimizes VRAM usage by processing heavy tasks (like video generation) sequentially, batch-by-batch, orchestrated entirely from within the graph.
 
@@ -29,7 +29,7 @@ The system is built around three major categories:
 
 ### 🎞️ Video (Assembly and Validation)
 5. **🕵️ Video Analyzer + Audio (`VideoAnalyzerWithAudio`)**: The "Explorer" of the machine. Scans the video using OpenCV to detect frames with sharp faces, extracts the pure, intact audio track using Torchaudio, and generates a **Reference Frame Visual Preview** on its own interface. It outputs this reference frame as an IMAGE format for the rest of the workflow.
-6. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: The "Brain". Receives information from the Explorer and calculates frame cuts (chunk, skip) asymmetrically. If provided with a `safe_faces_list`, it forces cuts on frames with recognizable faces to maintain fluid continuity.
+6. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: The "Brain". Receives information from the Explorer and calculates frame cuts (chunk, skip) asymmetrically. If provided with a `safe_faces_list`, it forces cuts on frames with recognizable faces to maintain fluid continuity. Now includes a **Dynamic ±10% Margin** to absorb video remainders at the final boundary, ensuring all cycles maintain a stable duration without generating inefficient tail ends.
 7. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Progressively archives generated tensors directly to the hard drive and safely assembles them at the end of all cycles.
    - **🧠 Zero OOM:** Replaces RAM accumulation with progressive temporary disk saves (`.pt`), clearing system memory immediately to enable infinite video processing without crashing the system.
    - **🎵 Audio Passthrough:** Feeds the original pure audio straight to the assembled output during the final loop iteration (returning `None` during intermediate loops to save resources).
