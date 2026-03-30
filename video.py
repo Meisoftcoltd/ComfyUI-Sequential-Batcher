@@ -138,8 +138,8 @@ class VideoAnalyzerWithAudio:
 
         print(f"{'='*50}\n")
 
-        # Devolvemos el diccionario con la clave 'ui' para que se pinte la preview en el lienzo
-        return {"ui": ui_result, "result": (video_name, frame_count, source_audio, safe_faces, ref_tensor)}
+        # 💡 EL BYPASS A VHS: Pasamos video_path (Ruta Absoluta) en lugar de video_name
+        return {"ui": ui_result, "result": (video_path, frame_count, source_audio, safe_faces, ref_tensor)}
 
 @register_node
 class AutoLoopCalculator:
