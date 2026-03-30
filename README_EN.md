@@ -1,68 +1,117 @@
-# ComfyUI Sequential Batcher (v1.5.0)
+# ComfyUI Sequential Batcher (v1.5.1)
 
-A highly specialized suite of custom nodes for ComfyUI designed for **Recursive Self-Queuing** and autonomous sequential processing. This architecture minimizes VRAM usage by processing heavy tasks (like video generation) sequentially, batch-by-batch, orchestrated entirely from within the graph.
+A highly specialized suite of custom nodes for ComfyUI designed for **Recursive Self-Queuing** and autonomous sequential processing. This architecture minimizes VRAM usage by processing heavy tasks (like video generation) sequentially, batch-by-batch, orchestrated entirely from within the graph itself.
 
 > **Leer en Español:** [README.md](README.md)
 
-## The Hybrid Identity Architecture
+---
 
-Starting with version 1.4.1, we have taken a step further by implementing the **Hybrid Identity Architecture**. All technical debt from older coupled loaders has been eliminated. Now, video processing is divided into three main logical roles:
+## 🌟 The Hybrid Identity Architecture
 
-1. **The Explorer (`VideoAnalyzerWithAudio`)**: A redesigned node with an ultra-clean interface (natively integrated with the VideoHelperSuite widget). It uses OpenCV to scan the input video for sharp faces, extracts the intact audio track, and **generates and outputs a Reference Frame (Visual Preview)** directly onto the ComfyUI canvas.
-2. **The Brain (`AutoLoopCalculator`)**: Receives the safe frames list from the Explorer and plans asymmetric, intelligent cuts. Instead of blindly dividing the video mathematically, it prioritizes making cuts on frames where the face is sharp, thereby maintaining identity coherence between loops.
-3. **The Worker (`VHS_LoadVideo`)**: The standard ComfyUI VideoHelperSuite node is now solely responsible for the heavy lifting: extracting the exact video tensors according to the Brain's orders.
+The **Hybrid Identity Architecture** (introduced in v1.4.1) eliminates the technical debt of older coupled loaders and divides video processing into three main logical roles:
 
-## The Core Nodes
+1. **🕵️ The Explorer (`VideoAnalyzerWithAudio`)**: Natively integrated with VideoHelperSuite, it uses OpenCV to scan the input video for sharp faces, extracts the pure intact audio track (via Torchaudio), and **generates and outputs a Reference Frame (Visual Preview)** in image format (`IMAGE`) directly onto the ComfyUI canvas.
+2. **📊 The Brain (`AutoLoopCalculator`)**: Receives the safe frames list from the Explorer and plans asymmetric, intelligent cuts (`chunk_frames`, `skip_frames`). It prioritizes cuts on frames where the face is sharp to maintain identity coherence across loops, and includes a **Dynamic ±10% Margin** to absorb final remainders without creating inefficient small batches.
+3. **🛠️ The Worker (`VHS_LoadVideo`)**: The standard ComfyUI VideoHelperSuite node is now solely responsible for the heavy lifting: extracting the exact video tensors according to the Brain's orders.
 
-The system is built around three major categories:
+---
+
+## 🧩 The Core Nodes
+
+The system is organized into four main categories in the ComfyUI interface under the `🔁 Sequential Batcher` menu:
 
 ### 🔁 Loop (Autonomous Orchestration)
-1. **🏁 Loop Start (Index) (`SequentialLoopStart`)**: Initiates the loop, manages the global loop index, and provides the current iteration index to downstream nodes.
-2. **🚀 Loop Trigger (Auto-Queue) (`SequentialLoopTrigger`)**: Placed at the very end of your workflow. It increments the loop counter and autonomously triggers an HTTP POST request to the ComfyUI API (`/prompt`) to queue the next batch cycle.
-   - **Seed Mutator:** Scans the canvas, locates nodes with a seed (`seed` or `noise_seed`), and injects a new 32-bit random seed, breaking forward cache in samplers.
-   - **💉 Anti-Cache Injection (New in v1.1.0!):** Specifically searches for the `Loop Start` node within the JSON payload and **forcefully injects the new index**. This shatters ComfyUI's infamous "reverse cache" (bottom-up) that froze initial nodes during Auto-Queue, guaranteeing uninterrupted progression.
+
+1. **`🏁 Loop Start (Index)`**
+   - **Inputs:** `reset_loop` (BOOLEAN), `loop_idx` (INT)
+   - **Outputs:** `current_loop_index` (INT)
+   - **Description:** Initiates the loop, manages the global loop index, and provides the current iteration index to image and video nodes downstream.
+
+2. **`🚀 Loop Trigger (Auto-Queue)`**
+   - **Inputs:** `trigger_dependency` (*), `port` (INT)
+   - **Description:** Placed at the very end of your workflow. It increments the counter and autonomously triggers an HTTP POST request to the ComfyUI API (`/prompt`) to queue the next cycle.
+   - **Special Functions:**
+     - **Seed Mutator:** Injects new random 32-bit seeds into any node with a `seed` or `noise_seed` on the canvas to break forward cache.
+     - **💉 Anti-Cache Injection:** Specifically searches for the `Loop Start` node within the JSON payload and forcefully injects the new index to shatter the reverse cache that freezes workflow progression.
 
 ### 🖼️ Image (Session Memory)
-3. **📥 Session Image Receiver (`SessionImageReceiver`)**: Retrieves the initial image or the last generated frame from the previous cycle, intelligently detecting the start of a RAM session.
-4. **📤 Session Image Sender (`SessionImageSender`)**: Extracts the final image of a batch and secures it in system memory for the next cycle.
-   - **💾 Keyframe Dumping (New in v1.1.0!):** Now receives the current index and performs a safety dump to the hard drive, progressively saving `keyframe_XXX.png` every cycle to prevent data loss.
-   - **✨ Dynamic Engine:** The `Session Image Sender` dynamically truncates generated tensors if the AI hallucination occurs (e.g., character turns their back), and updates the global accumulator so the `Auto Loop Calculator` accurately readjusts the next extraction cycle, ensuring flawless identity continuity without desyncing audio.
 
-### 🛠️ Tools
-**🛠️ Tools Suite:** Dedicated nodes (`ResTool 8x, 16x, 32x, 64x`) to calculate strictly divisible safe resolutions, shielding VRAM. Select your aspect ratio (e.g., 9:16) and base resolution (e.g., 1080). The specific node will apply a strict downward mathematical constraint to guarantee that the width and height are perfectly divisible by your model's architecture, shielding your VRAM from tensor errors.
+3. **`📥 Session Image Receiver`**
+   - **Inputs:** `initial_image` (IMAGE), `current_loop_index` (INT)
+   - **Outputs:** `current_image` (IMAGE)
+   - **Description:** Retrieves the initial image or the last generated frame from the previous cycle, recovering the session stored in global RAM.
 
-> **🛡️ Megapixel Shield (NEW in v1.5.1):** Each tool knows its model's "training floor" (e.g., WanVideo needs at least ~400k pixels). If you request an extreme resolution that falls below this vital threshold (which would cause artifacts or melted images), the node will automatically scale the width and height proportionally to save the generation before applying strict divisibility.
+4. **`📤 Session Image Sender`**
+   - **Inputs:** `generated_images` (IMAGE), `current_loop_index` (INT), `validate_face` (BOOLEAN)
+   - **Outputs:** `VALIDATED_IMAGES` (IMAGE)
+   - **Description:** Extracts the final valid image from a batch and secures it in system global memory (`.clone().cpu()`) for the next cycle.
+   - **Special Functions:**
+     - **💾 Keyframe Dumping:** Performs a safety dump to the hard drive, progressively saving `keyframe_XXX.png` every cycle.
+     - **🏎️ Dynamic F1 Engine:** Dynamically truncates the generated tensor backwards looking for the last valid face (if `validate_face` is True), and updates the global accumulator so the `Auto Loop Calculator` readjusts the next cycle seamlessly, avoiding audio desyncs.
+
+### 🛠️ Tools (Resolutions & Megapixel Shield)
+
+Dedicated nodes to calculate strictly divisible safe resolutions, shielding your VRAM from tensor mismatch errors by applying strict downward mathematical constraints.
+
+- **`📐 ResTool 8x (SD1.5)`**: Multiples of 8. Native base ~262,144 px.
+- **`📏 ResTool 16x (SDXL)`**: Multiples of 16. Native base ~1,048,576 px.
+- **`🎞️ ResTool 32x (WanVideo)`**: Multiples of 32. Native base ~399,360 px.
+- **`🎬 ResTool 64x (Hunyuan)`**: Multiples of 64. Native base ~921,600 px.
+
+**All Tools share the same interface:**
+- **Inputs:** `aspect_ratio` (e.g. 16:9, 9:16), `base_resolution` (INT)
+- **Outputs:** `width` (INT), `height` (INT), `debug_info` (STRING)
+
+> **🛡️ Megapixel Shield (NEW in v1.5.1):** Each tool knows its model's "training floor" area. If you request an extreme aspect ratio that falls below this vital threshold, the node will first scale the resolution up proportionally to protect the generation against melting artifacts, and only then apply strict divisibility.
 
 ### 🎞️ Video (Assembly and Validation)
-5. **🕵️ Video Analyzer + Audio (`VideoAnalyzerWithAudio`)**: The "Explorer" of the machine. Scans the video using OpenCV to detect frames with sharp faces, extracts the pure, intact audio track using Torchaudio, and generates a **Reference Frame Visual Preview** on its own interface. It outputs this reference frame as an IMAGE format for the rest of the workflow.
-6. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: The "Brain". Receives information from the Explorer and calculates frame cuts (chunk, skip) asymmetrically. If provided with a `safe_faces_list`, it forces cuts on frames with recognizable faces to maintain fluid continuity. Now includes a **Dynamic ±10% Margin** to absorb video remainders at the final boundary, ensuring all cycles maintain a stable duration without generating inefficient tail ends.
-7. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Progressively archives generated tensors directly to the hard drive and safely assembles them at the end of all cycles.
-   - **🧠 Zero OOM:** Replaces RAM accumulation with progressive temporary disk saves (`.pt`), clearing system memory immediately to enable infinite video processing without crashing the system.
-   - **🎵 Audio Passthrough:** Feeds the original pure audio straight to the assembled output during the final loop iteration (returning `None` during intermediate loops to save resources).
 
-## Setup & Usage
+5. **`🕵️ Video Analyzer + Audio`**
+   - **Inputs:** `video` (STRING), `reference_frame_idx` (INT), `use_face_detector` (BOOLEAN), `blur_threshold` (FLOAT)
+   - **Outputs:** `video_name` (STRING), `total_frames` (INT), `source_fps` (FLOAT), `source_audio` (AUDIO), `safe_faces_list` (FACE_CUTS), `reference_frame` (IMAGE)
+   - **Description:** Scans the video using OpenCV to detect sharp faces, extracts the pure audio track using Torchaudio, and outputs a visual and tensor Reference Frame (`IMAGE`).
+
+6. **`📊 Auto Loop Calculator`**
+   - **Inputs:** `source_frame_count` (INT), `target_frames_per_loop` (INT), `select_every_nth` (INT), `current_loop_index` (INT)
+   - **Optional Input:** `safe_faces_list` (FACE_CUTS)
+   - **Outputs:** `chunk_frames` (INT), `skip_frames` (INT), `select_every_nth` (INT)
+   - **Description:** Calculates frame cuts asymmetrically based on safe faces and applies the dynamic ±10% margin.
+
+7. **`🎞️ Incremental Auto-Stitcher`**
+   - **Inputs:** `images` (IMAGE), `audio` (AUDIO), `current_loop_index` (INT)
+   - **Outputs:** `ALL_IMAGES` (IMAGE), `AUDIO_OUT` (AUDIO)
+   - **Description:** Progressively archives generated tensors temporarily to the hard drive (`.pt`), clearing RAM immediately (**Zero OOM**). On the final cycle, it safely assembles all blocks utilizing a clean passthrough of the original audio track.
+
+---
+
+## 🚀 Setup & Usage
 
 ### Prerequisites
-- **VideoHelperSuite (VHS)**: **Recommended/Standard** for the "Worker" extraction node (`VHS_LoadVideo`).
-- **OpenCV (`opencv-python`)**: Required for the Explorer (`VideoAnalyzerWithAudio`) to scan for sharp faces. If not installed, face detection will safely be disabled.
-- **FFmpeg**: Must be installed and available in your system's PATH to manage underlying video operations.
-- **Torchaudio**: (Usually included in ComfyUI environments) is required for the Explorer node to extract the original pure audio track from the source.
+- **VideoHelperSuite (VHS)**: Mandatory for the "Worker" extraction node (`VHS_LoadVideo`).
+- **OpenCV (`opencv-python`)**: Required for the Explorer (`VideoAnalyzerWithAudio`). Face detection will safely fail without it.
+- **FFmpeg**: Must be installed and available in your system's PATH.
+- **Torchaudio**: Required for pure audio extraction (usually pre-installed with PyTorch).
 
 ### Installation
 1. Navigate to your ComfyUI `custom_nodes` folder.
-2. Clone this repository: `git clone https://github.com/your-repo/ComfyUI-Sequential-Batcher.git`
-3. Install the required dependencies if necessary (e.g., `pip install opencv-python`).
+2. Run: `git clone https://github.com/your-repo/ComfyUI-Sequential-Batcher.git`
+3. Install required dependencies if needed: `pip install -r requirements.txt` (or `pip install opencv-python`).
 4. Restart ComfyUI.
 
-### How to Connect the Hybrid Identity Architecture
-1. **The Explorer (`🕵️ Video Analyzer + Audio`)**: Place this node at the very beginning of your workflow. Upload your video here.
-2. **The Brain (`📊 Auto Loop Calculator`)**: Connect the `total_frames` output from the Explorer to the `source_frame_count` input of the Brain. Connect the `safe_faces_list` as well. Connect the `current_loop_index` from the `🏁 Loop Start` node.
-3. **The Worker (`VHS_LoadVideo`)**: Right-click on this standard ComfyUI node and select **Convert Widget to Input -> video**.
-   - Connect the `video_name` output from the Explorer to the new `video` input on the Worker.
-   - Connect the `chunk_frames`, `skip_frames`, and `select_every_nth` outputs from the Brain to the Worker.
-4. **Connecting Audio:** Pull a cable from the `source_audio` output of the Explorer and connect it directly to the blue `audio` port on your `🎞️ Incremental Auto-Stitcher`.
-5. **The End:** Add the `🚀 Loop Trigger (Auto-Queue)` node at the end. Connect the image or audio output from your `Incremental Auto-Stitcher` into the `trigger_dependency` input.
-6. **Execution:** Press "Queue Prompt" **once** (do not check Auto Queue). Batch 0 begins, the Explorer analyzes the video once, passes the cuts to the Brain, and the Worker iteratively extracts the tensors as the Anti-Cache Injection drives each successive cycle.
+### 🔌 Hybrid Architecture Connection Guide
+
+1. **The Explorer (`🕵️ Video Analyzer + Audio`)**: Place this node at the very beginning of your workflow and upload/select your source video.
+2. **The Brain (`📊 Auto Loop Calculator`)**:
+   - Connect the `total_frames` from the Explorer to `source_frame_count`.
+   - Connect the `safe_faces_list` from the Explorer (optional but highly recommended).
+   - Connect the `current_loop_index` from the `🏁 Loop Start` node.
+3. **The Worker (`VHS_LoadVideo`)**:
+   - Right-click on this standard VHS node and select **Convert Widget to Input -> video**.
+   - Connect the `video_name` from the Explorer to the `video` input on the Worker.
+   - Connect the `chunk_frames`, `skip_frames`, and `select_every_nth` from the Brain to their respective pins on the Worker.
+4. **Audio Passthrough**: Pull a cable directly from the `source_audio` output of the Explorer and connect it to the `audio` port of your `🎞️ Incremental Auto-Stitcher` at the end of the workflow.
+5. **Loop Closure (`🚀 Loop Trigger`)**: Connect the image or audio output from your Auto-Stitcher into the `trigger_dependency` input.
+6. **Execution**: Press **"Queue Prompt" ONLY ONCE** (do not check the Auto Queue box in the Comfy interface). The Trigger node will handle the recursive self-queuing autonomously in the background.
 
 ---
-*Created to push the boundaries of ComfyUI automation.*
+*Designed and optimized to push the boundaries of ComfyUI sequential automation and identity coherence.*
