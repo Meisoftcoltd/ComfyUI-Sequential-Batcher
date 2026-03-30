@@ -1,16 +1,18 @@
-# ComfyUI Sequential Batcher (v1.3.1)
+# ComfyUI Sequential Batcher (v1.4.0)
 
 A highly specialized suite of custom nodes for ComfyUI designed for **Recursive Self-Queuing** and autonomous sequential processing. This architecture minimizes VRAM usage by processing heavy tasks (like video generation) sequentially, batch-by-batch, orchestrated entirely from within the graph.
 
 > **Leer en Español:** [README.md](README.md)
 
-## The "Formula 1" Engine Architecture
+## The Hybrid Identity Architecture
 
-Starting with v1.0.0, this repository has pivoted exclusively to the autonomous sequential loops and global memory architecture. All legacy technical debt (deprecated batch/sequence/debug nodes) has been pruned, leaving a clean, highly maintainable codebase focused on 6 core nodes.
+Starting with version 1.4.0, we have taken a step further by implementing the **Hybrid Identity Architecture**. All technical debt from older coupled loaders has been eliminated. Now, video processing is divided into three main logical roles:
 
-In **v1.3.1**, we implemented the **"Explorer Cycle 0"**. We eliminated the external dependency on the total original frame count in the calculator by adopting a "Lazy Evaluation". In Cycle 0, the calculator blindly fires the user's intended target, while the video loader dynamically intercepts the true frame count directly from the VHS payload, dynamically calculating the total required loops for the rest of the generation. This removes unnecessary metadata nodes and keeps JSON layouts perfectly clean for n8n API integrations.
+1. **The Explorer (`VideoAnalyzerWithAudio`)**: A new node that utilizes OpenCV to scan the input video (in Cycle 0) for sharp, frontal faces, while also cleanly extracting the entire audio track.
+2. **The Brain (`AutoLoopCalculator`)**: Receives the safe frames list from the Explorer and plans asymmetric, intelligent cuts. Instead of blindly dividing the video mathematically, it prioritizes making cuts on frames where the face is sharp, thereby maintaining identity coherence between loops.
+3. **The Worker (`VHS_LoadVideo`)**: The standard ComfyUI VideoHelperSuite node is now solely responsible for the heavy lifting: extracting the exact video tensors according to the Brain's orders.
 
-## The 6 Core Nodes
+## The Core Nodes
 
 The system is built around three major categories:
 
@@ -26,33 +28,35 @@ The system is built around three major categories:
    - **💾 Keyframe Dumping (New in v1.1.0!):** Now receives the current index and performs a safety dump to the hard drive, progressively saving `keyframe_XXX.png` every cycle to prevent data loss.
 
 ### 🎞️ Video (Assembly and Validation)
-5. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: The mandatory "Brain" of the machine. In Cycle 0, it operates as an explorer without knowing the total duration of the original video. In subsequent cycles, it proportionally calculates and distributes batches of frames (even when using frame skipping with `select_every_nth`), preventing VRAM spikes. Everything flows smoothly with integration via ghost variables.
-6. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Progressively archives generated tensors directly to the hard drive and safely assembles them at the end of all cycles.
-   - **🧠 Zero OOM (New!):** Replaces RAM accumulation with progressive temporary disk saves (`.pt`), clearing system memory immediately to enable infinite video processing without crashing the system. By disabling `INPUT_IS_LIST`, it handles raw tensors efficiently.
-   - **🎵 Audio Passthrough (New!):** Feeds the original pure audio straight to the assembled output during the final loop iteration (returning `None` during intermediate loops to save resources).
-7. **🎥 Load Video + Source Audio (`LoadVideoWithSourceAudio`)**: (New!) This node **inherits directly from the original VHS class (`VHS_LoadVideo`)**. It functions exactly the same (including validations, UI preview widget, and upload button), but extracts and safely exposes the **complete**, uncropped original audio track to ensure it travels unaltered throughout the sequential process.
+5. **🕵️ Video Analyzer + Audio (`VideoAnalyzerWithAudio`)**: The "Explorer" of the machine. Scans the video using OpenCV to detect frames with sharp faces and extracts the pure, intact audio track using Torchaudio.
+6. **📊 Auto Loop Calculator (`AutoLoopCalculator`)**: The "Brain". Receives information from the Explorer and calculates frame cuts (chunk, skip) asymmetrically. If provided with a `safe_faces_list`, it forces cuts on frames with recognizable faces to maintain fluid continuity.
+7. **🎞️ Incremental Auto-Stitcher (`IncrementalVideoStitcher`)**: Progressively archives generated tensors directly to the hard drive and safely assembles them at the end of all cycles.
+   - **🧠 Zero OOM:** Replaces RAM accumulation with progressive temporary disk saves (`.pt`), clearing system memory immediately to enable infinite video processing without crashing the system.
+   - **🎵 Audio Passthrough:** Feeds the original pure audio straight to the assembled output during the final loop iteration (returning `None` during intermediate loops to save resources).
 
 ## Setup & Usage
 
 ### Prerequisites
-- **VideoHelperSuite (VHS)**: **Mandatory** for the `Load Video + Source Audio` node to function. Since it inherits from its base class, if VHS is not installed in your ComfyUI environment, this node will not load.
+- **VideoHelperSuite (VHS)**: **Recommended/Standard** for the "Worker" extraction node (`VHS_LoadVideo`).
+- **OpenCV (`opencv-python`)**: Required for the Explorer (`VideoAnalyzerWithAudio`) to scan for sharp faces. If not installed, face detection will safely be disabled.
 - **FFmpeg**: Must be installed and available in your system's PATH to manage underlying video operations.
-- **Torchaudio**: (Usually included in ComfyUI environments) is required to extract the original pure audio track from the source.
+- **Torchaudio**: (Usually included in ComfyUI environments) is required for the Explorer node to extract the original pure audio track from the source.
 
 ### Installation
 1. Navigate to your ComfyUI `custom_nodes` folder.
 2. Clone this repository: `git clone https://github.com/your-repo/ComfyUI-Sequential-Batcher.git`
-3. Restart ComfyUI.
+3. Install the required dependencies if necessary (e.g., `pip install opencv-python`).
+4. Restart ComfyUI.
 
-### How to use the Autonomous Machine
-1. **The Start:** Add the `🏁 Loop Start (Index)` and the `📊 Auto Loop Calculator` nodes.
-   - The calculator no longer requires the `source_frame_count` input. Simply define how many frames you want per loop in `target_frames_per_loop` and the `select_every_nth`.
-   - Connect the `current_loop_index` output of `Loop Start` to the calculator, and to your Image and Video nodes (Receiver, Sender, Stitcher). *Don't forget the Sender for keyframe saving!*
-   - Ensure the `reset_loop` toggle on the Loop Start is set to `False`.
-   - Wire the `chunk_frames`, `skip_frames`, and `select_every_nth` outputs from the calculator into your video loader/generator.
-2. **Connecting Audio (Optional):** If your workflow has sound, pull a cable from your initial node's audio output (e.g., `VHS_LoadVideo`) and connect it to the blue `audio` port on your `Incremental Auto-Stitcher`.
-3. **The End:** Add the `🚀 Loop Trigger (Auto-Queue)` node. Crucially, connect the image or audio output from your `Incremental Auto-Stitcher` into the `trigger_dependency` input. This forces the trigger to wait until the video is physically saved to the temporary disk before firing. (Note: thanks to the global ghost memory, the Trigger already knows how many loops to execute without needing extra cables).
-4. **Execution:** **You no longer need to check "Auto Queue".** Just press "Queue Prompt" **once**. Batch 0 starts, and upon finishing, the trigger invisibly signals the server. Thanks to Anti-Cache Injection, cache is destroyed on every iteration, and progress flows until your video is perfectly distributed and complete.
+### How to Connect the Hybrid Identity Architecture
+1. **The Explorer (`🕵️ Video Analyzer + Audio`)**: Place this node at the very beginning of your workflow. Upload your video here.
+2. **The Brain (`📊 Auto Loop Calculator`)**: Connect the `total_frames` output from the Explorer to the `source_frame_count` input of the Brain. Connect the `safe_faces_list` as well. Connect the `current_loop_index` from the `🏁 Loop Start` node.
+3. **The Worker (`VHS_LoadVideo`)**: Right-click on this standard ComfyUI node and select **Convert Widget to Input -> video**.
+   - Connect the `video_name` output from the Explorer to the new `video` input on the Worker.
+   - Connect the `chunk_frames`, `skip_frames`, and `select_every_nth` outputs from the Brain to the Worker.
+4. **Connecting Audio:** Pull a cable from the `source_audio` output of the Explorer and connect it directly to the blue `audio` port on your `🎞️ Incremental Auto-Stitcher`.
+5. **The End:** Add the `🚀 Loop Trigger (Auto-Queue)` node at the end. Connect the image or audio output from your `Incremental Auto-Stitcher` into the `trigger_dependency` input.
+6. **Execution:** Press "Queue Prompt" **once** (do not check Auto Queue). Batch 0 begins, the Explorer analyzes the video once, passes the cuts to the Brain, and the Worker iteratively extracts the tensors as the Anti-Cache Injection drives each successive cycle.
 
 ---
 *Created to push the boundaries of ComfyUI automation.*
