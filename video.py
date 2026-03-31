@@ -46,7 +46,11 @@ class VideoAnalyzerWithAudio:
     def IS_CHANGED(cls, video, **kwargs):
         # Romper el caché si el archivo ha sido modificado en disco
         video_name = video[0] if isinstance(video, (list, tuple)) else video
-        video_path = folder_paths.get_annotated_filepath(video_name)
+        if os.path.exists(video_name):
+            video_path = video_name
+        else:
+            video_path = folder_paths.get_annotated_filepath(video_name)
+
         if os.path.exists(video_path):
             return os.path.getmtime(video_path)
         return time.time()
@@ -54,14 +58,21 @@ class VideoAnalyzerWithAudio:
     @classmethod
     def VALIDATE_INPUTS(cls, video, **kwargs):
         video_name = video[0] if isinstance(video, (list, tuple)) else video
-        video_path = folder_paths.get_annotated_filepath(video_name)
+        if os.path.exists(video_name):
+            video_path = video_name
+        else:
+            video_path = folder_paths.get_annotated_filepath(video_name)
+
         if not os.path.exists(video_path):
             return f"❌ El archivo de video no existe en: {video_path}"
         return True
 
     def analyze(self, video, reference_frame_idx, use_face_detector, blur_threshold, **kwargs):
         video_name = video[0] if isinstance(video, (list, tuple)) else video
-        video_path = folder_paths.get_annotated_filepath(video_name)
+        if os.path.exists(video_name):
+            video_path = video_name
+        else:
+            video_path = folder_paths.get_annotated_filepath(video_name)
 
         print(f"\n{'='*50}")
         print(f"🕵️ [DEBUG] NODO: Video Analyzer (Explorador)")
