@@ -77,7 +77,13 @@ Dedicated nodes to calculate strictly divisible safe resolutions, shielding your
    - **Outputs:** `chunk_frames` (INT), `skip_frames` (INT), `select_every_nth` (INT)
    - **Description:** Calculates frame cuts asymmetrically based on safe faces and applies the dynamic ±10% margin.
 
-7. **`🎞️ Incremental Auto-Stitcher`**
+7. **`📊 Auto Loop Calculator (WanVideo 3dVAE)`**
+   - **Inputs:** `source_frame_count` (INT), `target_frames_per_loop` (INT), `select_every_nth` (INT), `current_loop_index` (INT)
+   - **Optional Input:** `safe_faces_list` (FACE_CUTS)
+   - **Outputs:** `chunk_frames` (INT), `skip_frames` (INT), `select_every_nth` (INT)
+   - **Description:** A specialized variant designed for the WanVideo model. It incorporates a strict mathematical shield that safely truncates targets and frame counts downward to multiples of 4, gracefully discarding the final 1 to 3 frames to protect the 3D VAE from an "invalid shape" crash.
+
+8. **`🎞️ Incremental Auto-Stitcher`**
    - **Inputs:** `images` (IMAGE), `audio` (AUDIO), `current_loop_index` (INT)
    - **Outputs:** `ALL_IMAGES` (IMAGE), `AUDIO_OUT` (AUDIO)
    - **Description:** Progressively archives generated tensors temporarily to the hard drive (`.pt`), clearing RAM immediately (**Zero OOM**). On the final cycle, it safely assembles all blocks utilizing a clean passthrough of the original audio track.
