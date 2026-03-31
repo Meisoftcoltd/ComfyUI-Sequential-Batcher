@@ -256,3 +256,101 @@ class IncrementalVideoStitcher:
         print(f"✅ [Stitcher] Vídeo completado: {final_images.shape[0]} frames ensamblados.")
 
         return (final_images, audio)
+
+@register_node
+class AutoLoopCalculatorWan:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "source_frame_count": ("INT", {"forceInput": True}),
+                "target_frames_per_loop": ("INT", {"default": 48, "min": 4, "max": 10000, "step": 4}),
+                "select_every_nth": ("INT", {"default": 1, "min": 1, "max": 100}),
+                "current_loop_index": ("INT", {"forceInput": True}),
+            },
+            "optional": {
+                "safe_faces_list": ("FACE_CUTS", {"forceInput": True}),
+            }
+        }
+
+    RETURN_TYPES = ("INT", "INT", "INT")
+    RETURN_NAMES = ("chunk_frames", "skip_frames", "select_every_nth")
+    FUNCTION = "calculate"
+    CATEGORY = "🔁 Sequential Batcher/Video"
+
+    def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index, safe_faces_list=None):
+        import math
+        from . import loop
+
+        # 1. TRUNCADO GLOBAL PARA WANVIDEO (Múltiplo de 4)
+        # Ignoramos el remanente asimétrico del video original para no estrellar el VAE en el ciclo final
+        safe_source_frame_count = (source_frame_count // 4) * 4
+
+        loop.global_source_frame_count = safe_source_frame_count
+        loop.global_select_every_nth = select_every_nth
+
+        current_pos = getattr(loop, 'global_accumulated_frames', 0)
+
+        print(f"\n{'='*50}")
+        print(f"📊 [DEBUG] NODO: Auto Loop Calculator (WanVideo 3D VAE)")
+        print(f"   -> Timeline seguro ajustado a múltiplos de 4: {current_pos} / {safe_source_frame_count} (Original: {source_frame_count})")
+
+        # Prevención de desbordamiento de bucle
+        if current_pos >= safe_source_frame_count:
+            return (4, current_pos, select_every_nth)
+
+        frames_left = safe_source_frame_count - current_pos
+
+        # 2. Asegurar que el target per loop es múltiplo de 4 estricto
+        safe_target = (target_frames_per_loop // 4) * 4
+        if safe_target < 4: safe_target = 4
+
+        total_loops = math.ceil(safe_source_frame_count / (safe_target * select_every_nth))
+        if total_loops <= 0: total_loops = 1
+
+        equitable_target = math.floor(safe_source_frame_count / total_loops)
+
+        # 3. Múltiplo de 4 para la meta equitativa
+        equitable_target = (equitable_target // 4) * 4
+        if equitable_target < 4: equitable_target = 4
+
+        ideal_cut = current_pos + equitable_target
+
+        if frames_left <= equitable_target:
+            best_cut = safe_source_frame_count
+            print(f"   -> 🧮 Absorbiendo resto final seguro: meta fijada en frame {best_cut}")
+        else:
+            best_cut = ideal_cut
+            if safe_faces_list and len(safe_faces_list) > 0:
+                closest_face = min(safe_faces_list, key=lambda x: abs(x - ideal_cut))
+                # Distancia al corte de cara
+                chunk_from_face = math.ceil((closest_face - current_pos) / select_every_nth)
+                # Blindaje matemático x4 para el corte de cara
+                safe_chunk_from_face = (chunk_from_face // 4) * 4
+                if safe_chunk_from_face < 4: safe_chunk_from_face = 4
+
+                best_cut = current_pos + (safe_chunk_from_face * select_every_nth)
+                print(f"   -> ✂️ Corte Inteligente (Ajustado x4): {best_cut} (Cara original detectada: {closest_face})")
+            else:
+                print(f"   -> ⚖️ Sin caras. Forzando corte equitativo x4: {ideal_cut}")
+
+        # 4. Cálculo final del chunk con blindaje absoluto hacia VHS
+        effective_chunk_frames = math.ceil((best_cut - current_pos) / select_every_nth)
+        effective_chunk_frames = (effective_chunk_frames // 4) * 4
+
+        # Regla de oro de WanVideo: mínimo 4 frames para que el VAE no colapse
+        if effective_chunk_frames < 4:
+            effective_chunk_frames = 4
+
+        # Control de límites: Si este chunk x4 nos hace pasarnos del total seguro, ajustar al resto exacto
+        if current_pos + (effective_chunk_frames * select_every_nth) > safe_source_frame_count:
+            remaining = safe_source_frame_count - current_pos
+            effective_chunk_frames = (remaining // 4) * 4
+            if effective_chunk_frames < 4: effective_chunk_frames = 4
+
+        skip_frames = current_pos
+
+        print(f"   -> 🚀 Ciclo {current_loop_index}: Solicitando {effective_chunk_frames} frames efectivos a VHS (Saltando {skip_frames})")
+        print(f"{'='*50}\n")
+
+        return (effective_chunk_frames, skip_frames, select_every_nth)

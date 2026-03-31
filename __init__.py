@@ -17,6 +17,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "IncrementalVideoStitcher": "🎞️ Incremental Auto-Stitcher",
     "VideoAnalyzerWithAudio": "🕵️ Video Analyzer + Audio",
     "AutoLoopCalculator": "📊 Auto Loop Calculator",
+    "AutoLoopCalculatorWan": "📊 Auto Loop Calculator (WanVideo 3dVAE)",
     "SequentialLoopStart": "🏁 Loop Start (Index)",
     "SequentialLoopTrigger": "🚀 Loop Trigger (Auto-Queue)",
     # Tools
