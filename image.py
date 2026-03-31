@@ -76,7 +76,7 @@ class SessionImageSender:
             "required": {
                 "generated_images": ("IMAGE",),
                 "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000}),
-                "validate_face": ("BOOLEAN", {"default": True}),
+                "detect_faces": ("BOOLEAN", {"default": True}),
             },
         }
 
@@ -90,7 +90,7 @@ class SessionImageSender:
     def IS_CHANGED(cls, **kwargs):
         return time.time()
 
-    def set_image(self, generated_images, current_loop_index, validate_face):
+    def set_image(self, generated_images, current_loop_index, detect_faces):
         from . import loop
         import cv2
         import numpy as np
@@ -109,7 +109,7 @@ class SessionImageSender:
         print(f"📤 [DEBUG] NODO: Image Sender (Filtro Dinámico)")
         print(f"   -> Frames recibidos de la IA: {batch_size}")
 
-        if validate_face:
+        if detect_faces:
             try:
                 cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
                 face_cascade = cv2.CascadeClassifier(cascade_path)
@@ -133,6 +133,9 @@ class SessionImageSender:
                     best_idx = 0
             except Exception as e:
                 print(f"   -> ⚠️ Error en OpenCV al validar: {e}")
+        else:
+            print(f"   -> ⏩ Detección de rostros desactivada. Usando el último frame absoluto del lote ({batch_size - 1}).")
+            best_idx = batch_size - 1
 
         # 1. TRUNCAR EL TENSOR
         valid_images = generated_images[:best_idx + 1]

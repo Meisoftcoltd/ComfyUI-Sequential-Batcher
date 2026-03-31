@@ -182,28 +182,24 @@ class AutoLoopCalculator:
             return (1, current_pos, select_every_nth)
 
         frames_left = source_frame_count - current_pos
-        target_original = target_frames_per_loop * select_every_nth
-        margin = max(1, int(target_original * 0.10))
 
-        min_chunk = target_original - margin
-        max_chunk = target_original + margin
+        total_loops = math.ceil(source_frame_count / (target_frames_per_loop * select_every_nth))
+        equitable_target = math.floor(source_frame_count / total_loops)
 
-        if frames_left <= max_chunk:
+        ideal_cut = current_pos + equitable_target
+
+        if frames_left <= equitable_target:
             best_cut = source_frame_count
             print(f"   -> 🧮 Absorbiendo resto final: meta fijada en frame {best_cut}")
         else:
-            ideal_cut = current_pos + target_original
-            min_cut = current_pos + min_chunk
-            max_cut = min(current_pos + max_chunk, source_frame_count)
-
             best_cut = ideal_cut
             if safe_faces_list and len(safe_faces_list) > 0:
-                valid_cuts = [f for f in safe_faces_list if min_cut <= f <= max_cut]
-                if valid_cuts:
-                    best_cut = min(valid_cuts, key=lambda x: abs(x - ideal_cut))
-                    print(f"   -> ✂️ Corte Inteligente proyectado: {best_cut} (Ventana: {min_cut}-{max_cut})")
-                else:
-                    print(f"   -> ⚠️ Sin caras en ventana. Forzando ideal: {ideal_cut}")
+                # Find the safe face closest to the equitable target
+                closest_face = min(safe_faces_list, key=lambda x: abs(x - ideal_cut))
+                best_cut = closest_face
+                print(f"   -> ✂️ Corte Inteligente proyectado: {best_cut} (Meta equitativa: {ideal_cut})")
+            else:
+                print(f"   -> ⚖️ Sin caras detectadas. Forzando corte equitativo: {ideal_cut}")
 
         effective_chunk_frames = math.ceil((best_cut - current_pos) / select_every_nth)
         skip_frames = current_pos
