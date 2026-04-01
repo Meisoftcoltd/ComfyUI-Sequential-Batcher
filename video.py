@@ -19,18 +19,21 @@ except ImportError:
 class VideoAnalyzerWithAudio:
     @classmethod
     def INPUT_TYPES(cls):
-        # Mantenemos el widget visual de VHS para subidas manuales
-        vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
-        video_input = ("STRING", {"video_upload": True})
-        if vhs_class:
-            vhs_inputs = vhs_class.INPUT_TYPES()
-            if "video" in vhs_inputs.get("required", {}):
-                video_input = vhs_inputs["required"]["video"]
+        # 1. Obtenemos los archivos locales igual que VHS
+        input_dir = folder_paths.get_input_directory()
+        files = []
+        video_extensions = ['webm', 'mp4', 'mkv', 'gif', 'mov'] # Mismos que VHS
+        if os.path.exists(input_dir):
+            for f in os.listdir(input_dir):
+                if os.path.isfile(os.path.join(input_dir, f)):
+                    file_parts = f.split('.')
+                    if len(file_parts) > 1 and (file_parts[-1].lower() in video_extensions):
+                        files.append(f)
 
+        # 2. El truco VHS: Una tupla con (lista_de_archivos,) pero configurado como STRING y con forceInput=False
         return {
             "required": {
-                # 💡 CAMBIO CLAVE: Cambiamos "STRING" por "*" para aceptar CUALQUIER cable
-                "video": ("*", {"default": ""}),
+                "video": (sorted(files), {"forceInput": False, "video_upload": True}),
                 "reference_frame_idx": ("INT", {"default": 0, "min": 0, "max": 100000, "step": 1}),
                 "use_face_detector": ("BOOLEAN", {"default": True}),
                 "blur_threshold": ("FLOAT", {"default": 100.0, "min": 0.0, "max": 1000.0, "step": 1.0}),
@@ -39,18 +42,17 @@ class VideoAnalyzerWithAudio:
 
     RETURN_TYPES = ("STRING", "INT", "FLOAT", "AUDIO", "FACE_CUTS", "IMAGE")
     RETURN_NAMES = ("video_name", "total_frames", "source_fps", "source_audio", "safe_faces_list", "reference_frame")
-    OUTPUT_NODE = True  # Obligatorio para que ComfyUI renderice la preview
+    OUTPUT_NODE = True
     FUNCTION = "analyze"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
     @classmethod
     def IS_CHANGED(cls, video, **kwargs):
-        video_name = video[0] if isinstance(video, (list, tuple)) else video
-
-        if os.path.exists(video_name):
-            video_path = video_name
+        # VHS procesa las rutas dinámicas resolviéndolas directamente
+        if os.path.exists(video):
+            video_path = video
         else:
-            video_path = folder_paths.get_annotated_filepath(video_name)
+            video_path = folder_paths.get_annotated_filepath(video)
 
         if os.path.exists(video_path):
             return os.path.getmtime(video_path)
@@ -58,21 +60,19 @@ class VideoAnalyzerWithAudio:
 
     @classmethod
     def VALIDATE_INPUTS(cls, **kwargs):
-        # 🛡️ ESCUDO TOTAL: Al aceptar "*", ComfyUI delega toda la responsabilidad al nodo.
-        # Devolvemos True para permitir la conexión de cualquier nodo de descarga.
+        # Bypass para permitir conexiones dinámicas (como descargas en curso)
         return True
 
     def analyze(self, video, reference_frame_idx, use_face_detector, blur_threshold, **kwargs):
-        video_name = video[0] if isinstance(video, (list, tuple)) else video
-
-        if os.path.exists(video_name):
-            video_path = video_name
+        # Resolución unificada de la ruta, tal como hace VHS
+        if os.path.exists(video):
+            video_path = video
         else:
-            video_path = folder_paths.get_annotated_filepath(video_name)
+            video_path = folder_paths.get_annotated_filepath(video)
 
         print(f"\n{'='*50}")
         print(f"🕵️ [DEBUG] NODO: Video Analyzer (Explorador)")
-        print(f"   -> Archivo: {video_path}")
+        print(f"   -> Archivo resuelto: {video_path}")
 
         # 1. Extracción de Audio Íntegro
         source_audio = None
