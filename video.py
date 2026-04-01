@@ -33,6 +33,9 @@ class VideoAnalyzerWithAudio:
                 "reference_frame_idx": ("INT", {"default": 0, "min": 0, "max": 100000, "step": 1}),
                 "use_face_detector": ("BOOLEAN", {"default": True}),
                 "blur_threshold": ("FLOAT", {"default": 100.0, "min": 0.0, "max": 1000.0, "step": 1.0}),
+            },
+            "optional": {
+                "opt_video_path": ("STRING", {"forceInput": True}),
             }
         }
 
@@ -44,8 +47,13 @@ class VideoAnalyzerWithAudio:
 
     @classmethod
     def IS_CHANGED(cls, video, **kwargs):
-        # Romper el caché si el archivo ha sido modificado en disco
-        video_name = video[0] if isinstance(video, (list, tuple)) else video
+        # Usar entrada opcional si está disponible, sino usar video
+        opt_video_path = kwargs.get("opt_video_path", None)
+        if opt_video_path is not None:
+            video_name = opt_video_path[0] if isinstance(opt_video_path, (list, tuple)) else opt_video_path
+        else:
+            video_name = video[0] if isinstance(video, (list, tuple)) else video
+
         if os.path.exists(video_name):
             video_path = video_name
         else:
@@ -57,7 +65,12 @@ class VideoAnalyzerWithAudio:
 
     @classmethod
     def VALIDATE_INPUTS(cls, video, **kwargs):
-        video_name = video[0] if isinstance(video, (list, tuple)) else video
+        opt_video_path = kwargs.get("opt_video_path", None)
+        if opt_video_path is not None:
+            video_name = opt_video_path[0] if isinstance(opt_video_path, (list, tuple)) else opt_video_path
+        else:
+            video_name = video[0] if isinstance(video, (list, tuple)) else video
+
         if os.path.exists(video_name):
             video_path = video_name
         else:
@@ -67,8 +80,12 @@ class VideoAnalyzerWithAudio:
             return f"❌ El archivo de video no existe en: {video_path}"
         return True
 
-    def analyze(self, video, reference_frame_idx, use_face_detector, blur_threshold, **kwargs):
-        video_name = video[0] if isinstance(video, (list, tuple)) else video
+    def analyze(self, video, reference_frame_idx, use_face_detector, blur_threshold, opt_video_path=None, **kwargs):
+        if opt_video_path is not None:
+            video_name = opt_video_path[0] if isinstance(opt_video_path, (list, tuple)) else opt_video_path
+        else:
+            video_name = video[0] if isinstance(video, (list, tuple)) else video
+
         if os.path.exists(video_name):
             video_path = video_name
         else:
