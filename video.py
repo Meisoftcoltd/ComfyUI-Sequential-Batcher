@@ -19,9 +19,9 @@ except ImportError:
 class VideoAnalyzerWithAudio:
     @classmethod
     def INPUT_TYPES(cls):
-        # 💡 TRUCO: Robamos solo el widget de video (con su botón Upload) de VHS
+        # Mantenemos el widget visual de VHS para subidas manuales
         vhs_class = nodes.NODE_CLASS_MAPPINGS.get("VHS_LoadVideo")
-        video_input = ("STRING", {"video_upload": True}) # Fallback por defecto
+        video_input = ("STRING", {"video_upload": True})
         if vhs_class:
             vhs_inputs = vhs_class.INPUT_TYPES()
             if "video" in vhs_inputs.get("required", {}):
@@ -29,7 +29,8 @@ class VideoAnalyzerWithAudio:
 
         return {
             "required": {
-                "video": video_input,
+                # 💡 CAMBIO CLAVE: Cambiamos "STRING" por "*" para aceptar CUALQUIER cable
+                "video": ("*", {"default": ""}),
                 "reference_frame_idx": ("INT", {"default": 0, "min": 0, "max": 100000, "step": 1}),
                 "use_face_detector": ("BOOLEAN", {"default": True}),
                 "blur_threshold": ("FLOAT", {"default": 100.0, "min": 0.0, "max": 1000.0, "step": 1.0}),
@@ -57,9 +58,8 @@ class VideoAnalyzerWithAudio:
 
     @classmethod
     def VALIDATE_INPUTS(cls, **kwargs):
-        # Al devolver True, secuestramos y anulamos el validador nativo estricto de ComfyUI.
-        # Esto permite que el nodo se comporte como VHS: acepta tanto subidas manuales
-        # como rutas dinámicas por cable de archivos que aún no se han descargado.
+        # 🛡️ ESCUDO TOTAL: Al aceptar "*", ComfyUI delega toda la responsabilidad al nodo.
+        # Devolvemos True para permitir la conexión de cualquier nodo de descarga.
         return True
 
     def analyze(self, video, reference_frame_idx, use_face_detector, blur_threshold, **kwargs):
