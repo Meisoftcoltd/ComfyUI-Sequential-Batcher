@@ -64,20 +64,19 @@ class VideoAnalyzerWithAudio:
         return time.time()
 
     @classmethod
-    def VALIDATE_INPUTS(cls, video, **kwargs):
-        opt_video_path = kwargs.get("opt_video_path", None)
-        if opt_video_path is not None:
-            video_name = opt_video_path[0] if isinstance(opt_video_path, (list, tuple)) else opt_video_path
-        else:
-            video_name = video[0] if isinstance(video, (list, tuple)) else video
+    def VALIDATE_INPUTS(cls, **kwargs):
+        # 1. Bypass dinámico: Si el puerto opcional está conectado, delegamos la existencia al tiempo de ejecución
+        if "opt_video_path" in kwargs and kwargs["opt_video_path"] is not None:
+            return True
 
-        if os.path.exists(video_name):
-            video_path = video_name
-        else:
-            video_path = folder_paths.get_annotated_filepath(video_name)
+        # 2. Validación estricta UX: Si se usa el widget manual estándar, verificamos físicamente el archivo
+        if "video" in kwargs:
+            video_val = kwargs["video"]
+            if isinstance(video_val, str):
+                video_path = folder_paths.get_annotated_filepath(video_val)
+                if not os.path.exists(video_path):
+                    return f"❌ El archivo de video no existe en: {video_path}"
 
-        if not os.path.exists(video_path):
-            return f"❌ El archivo de video no existe en: {video_path}"
         return True
 
     def analyze(self, video, reference_frame_idx, use_face_detector, blur_threshold, opt_video_path=None, **kwargs):
