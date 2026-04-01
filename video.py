@@ -55,6 +55,13 @@ class VideoAnalyzerWithAudio:
             return os.path.getmtime(video_path)
         return time.time()
 
+    @classmethod
+    def VALIDATE_INPUTS(cls, **kwargs):
+        # Al devolver True, secuestramos y anulamos el validador nativo estricto de ComfyUI.
+        # Esto permite que el nodo se comporte como VHS: acepta tanto subidas manuales
+        # como rutas dinámicas por cable de archivos que aún no se han descargado.
+        return True
+
     def analyze(self, video, reference_frame_idx, use_face_detector, blur_threshold, **kwargs):
         video_name = video[0] if isinstance(video, (list, tuple)) else video
 
