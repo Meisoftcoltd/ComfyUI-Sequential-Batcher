@@ -11,6 +11,7 @@ global_loop_index = 0
 global_accumulated_frames = 0
 global_source_frame_count = 1
 global_select_every_nth = 1
+global_server_port = 8188  # 💡 NUEVO: Única fuente de la verdad para el puerto
 
 @register_node
 class SequentialLoopStart:
@@ -20,6 +21,7 @@ class SequentialLoopStart:
             "required": {
                 "reset_loop": ("BOOLEAN", {"default": False}),
                 "loop_idx": ("INT", {"default": 0, "min": 0, "max": 10000}),
+                "port": ("INT", {"default": 8188, "min": 1, "max": 65535}), # 💡 FAIL-FAST: Pedimos el puerto aquí
             }
         }
 
@@ -32,12 +34,27 @@ class SequentialLoopStart:
     def IS_CHANGED(cls, **kwargs):
         return time.time()
 
-    def get_index(self, reset_loop, loop_idx):
+    def get_index(self, reset_loop, loop_idx, port):
         global global_loop_index
         global global_accumulated_frames
+        global global_server_port
 
         print(f"\n{'='*50}")
         print(f"🚀 [DEBUG] NODO: Loop Start (Motor Dinámico)")
+
+        # --- PRE-FLIGHT CHECK (FAIL-FAST) ---
+        print(f"   -> 📡 Verificando conexión con ComfyUI en el puerto {port}...")
+        try:
+            # Ping ultrarrápido a la API. Si falla, colapsa en 0.1 segundos.
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/system_stats")
+            urllib.request.urlopen(req, timeout=2)
+            global_server_port = port  # Guardamos el puerto correcto para el Trigger
+            print(f"   -> ✅ Conexión establecida. Puerto blindado.")
+        except Exception as e:
+            print(f"   -> ❌ ERROR FATAL: No se pudo conectar al puerto {port}.")
+            raise ValueError(f"🚨 EL PUERTO {port} ES INCORRECTO O COMFYUI NO RESPONDE. "
+                             f"Cambia el puerto en el nodo 'Loop Start' antes de procesar. (Error: {e})")
+        # ------------------------------------
 
         is_reset = str(reset_loop).lower() in ['true', '1', 't', 'y']
         if is_reset or loop_idx == 0:
@@ -47,10 +64,8 @@ class SequentialLoopStart:
         else:
             global_loop_index = loop_idx
 
-        print(f"   -> 📤 OUTPUT current_loop_index: {global_loop_index}")
-        print(f"   -> 📈 Frames acumulados históricamente: {global_accumulated_frames}")
+        print(f"   -> 📍 Índice actual de bucle: {global_loop_index}")
         print(f"{'='*50}\n")
-
         return (global_loop_index,)
 
 @register_node
@@ -60,7 +75,6 @@ class SequentialLoopTrigger:
         return {
             "required": {
                 "trigger_dependency": ("*", ),
-                "port": ("INT", {"default": 8188, "min": 1000, "max": 9999}),
             },
             "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"}
         }
@@ -75,10 +89,11 @@ class SequentialLoopTrigger:
     def IS_CHANGED(cls, **kwargs):
         return time.time()
 
-    def trigger_next(self, trigger_dependency, port, prompt=None, extra_pnginfo=None):
+    def trigger_next(self, trigger_dependency, prompt=None, extra_pnginfo=None):
         global global_loop_index
         global global_accumulated_frames
         global global_source_frame_count
+        global global_server_port
 
         next_loop = global_loop_index + 1
         is_final = global_accumulated_frames >= global_source_frame_count
@@ -106,7 +121,7 @@ class SequentialLoopTrigger:
             if extra_pnginfo:
                 p["extra_data"] = {"extra_pnginfo": extra_pnginfo}
             data = json.dumps(p).encode('utf-8')
-            req = urllib.request.Request(f"http://127.0.0.1:{port}/prompt", data=data, headers={'Content-Type': 'application/json'})
+            req = urllib.request.Request(f"http://127.0.0.1:{global_server_port}/prompt", data=data, headers={'Content-Type': 'application/json'})
             try:
                 urllib.request.urlopen(req, timeout=5)
                 print(f"   -> ✅ Ciclo {next_loop} inyectado en la cola.")
