@@ -29,22 +29,29 @@ Para que el nodo `VideoAnalyzerWithAudio` pueda desempaquetar contenedores `.mp4
   Descarga los binarios precompilados de FFmpeg y añade la carpeta bin a tus variables de entorno (PATH).
 
 ## 🧠 La Arquitectura Híbrida (Cómo funciona)
-El procesamiento de vídeo se divide en 4 roles altamente especializados:
+El procesamiento de vídeo se divide en roles altamente especializados:
 
-* **🕵️ El Explorador (VideoAnalyzerWithAudio):** Escanea el vídeo vía OpenCV, extrae el audio y escupe un Frame de Referencia visual. Actúa como la puerta de entrada principal.
-* **📊 El Cerebro (AutoLoopCalculator):** Recibe la biometría del Explorador y calcula las coordenadas de corte asimétricas (chunk_frames, skip_frames) con un margen dinámico del ±10% para evitar minilotes residuales.
+* **🕵️ Video Analyzer + Audio (El Explorador):** Escanea el vídeo vía OpenCV, extrae el audio y escupe un Frame de Referencia visual. Actúa como la puerta de entrada principal.
+* **📊 Auto Loop Calculator (El Cerebro):** Recibe la biometría del Explorador y calcula las coordenadas de corte asimétricas (chunk_frames, skip_frames) con un margen dinámico del ±10% para evitar minilotes residuales.
+* **📊 Auto Loop Calculator (WanVideo 3dVAE):** Alternativa para WanVideo que asegura que los chunks de frames sean estrictamente múltiplos de 4, protegiendo al VAE 3D de colapsar.
 * **🛠️ El Obrero (VHS_LoadVideo):** Liberado de tareas de análisis, este nodo estándar de ComfyUI se limita a extraer los tensores exactos que el Cerebro le ordena.
-* **🎞️ El Ensamblador (IncrementalVideoStitcher):** Recoge los lotes renderizados y la pista de audio original, cosiendo el vídeo final de forma progresiva.
+* **🎞️ Incremental Auto-Stitcher (El Ensamblador):** Recoge los lotes renderizados y la pista de audio original, cosiendo el vídeo final de forma progresiva.
+* **📥 Session Image Receiver** y **📤 Session Image Sender:** Retienen y transfieren el último keyframe válido (frame de referencia) a través de los ciclos para mantener la coherencia temporal de la identidad.
+* **Resoluciones Protegidas (Megapixel Shield):** Herramientas de resolución matemáticas que escalan las dimensiones para evitar artefactos protegiendo el "training floor" de cada modelo:
+  * **📐 ResTool 8x (SD1.5)**
+  * **📏 ResTool 16x (SDXL)**
+  * **🎞️ ResTool 32x (WanVideo)**
+  * **🎬 ResTool 64x (Hunyuan)**
 
 ## 🔌 Guía de Cableado (Workflow Setup)
 Para montar el flujo secuencial perfecto, sigue estos pasos:
 
 1. **Setup Inicial:** Coloca el 🕵️ Video Analyzer + Audio al principio. Sube un vídeo o conéctale un cable STRING desde tu descargador favorito.
-2. **Matemáticas:** Conecta total_frames y safe_faces_list del Explorador hacia el 📊 Auto Loop Calculator.
+2. **Matemáticas:** Conecta total_frames y safe_faces_list del Explorador hacia el 📊 Auto Loop Calculator (o 📊 Auto Loop Calculator (WanVideo 3dVAE) si usas WanVideo).
 3. **Extracción:** Añade un nodo VHS_LoadVideo. Haz clic derecho en él -> Convert Widget to Input -> video. Conecta el video_name del Explorador a esta nueva entrada. Alimenta los parámetros de corte desde el Cerebro.
 4. **Passthrough de Audio:** Lleva el cable source_audio desde el Explorador hasta el puerto audio de tu 🎞️ Incremental Auto-Stitcher (al final del flujo).
 5. **El Gatillo:** Conecta la salida de tu Stitcher a la entrada del 🚀 Loop Trigger (Auto-Queue).
-6. **Ejecución:** Conecta el 🏁 Loop Start al Cerebro y al Stitcher. Dale a "Queue Prompt" UNA SOLA VEZ (sin marcar Auto Queue en la UI). ¡Disfruta de la magia autónoma!
+6. **Ejecución:** Conecta el 🏁 Loop Start (Index) al Cerebro y al Stitcher. Dale a "Queue Prompt" UNA SOLA VEZ (sin marcar Auto Queue en la UI). ¡Disfruta de la magia autónoma!
 
 ## 🧹 Auto-Limpieza de VRAM (NUEVO)
 El nodo `SequentialLoopTrigger` ahora actúa como un gestor de limpieza inteligente. Una vez que detecta que se han procesado todos los frames y la generación del video ha finalizado, automáticamente:
