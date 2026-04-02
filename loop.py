@@ -2,6 +2,9 @@ import random
 import time
 import urllib.request
 import json
+import gc
+import torch
+import comfy.model_management as mm
 from . import register_node
 
 global_loop_index = 0
@@ -113,6 +116,27 @@ class SequentialLoopTrigger:
             print(f"   -> 🏁 ¡Generación Finalizada! Todos los frames ensamblados.")
             global_loop_index = 0
             global_accumulated_frames = 0
+
+            # --- LIMPIEZA EXTREMA DE VRAM AUTOMÁTICA (Multi-Plataforma) ---
+            print(f"   -> 🧹 Iniciando vaciado automático de VRAM...")
+            try:
+                # 1. Obligamos al motor interno de ComfyUI a soltar los modelos
+                mm.unload_all_models()
+                mm.soft_empty_cache()
+            except Exception as e:
+                print(f"   -> ⚠️ Aviso: No se pudo usar model_management: {e}")
+
+            # 2. Forzamos al recolector de basura de Python
+            gc.collect()
+
+            # 3. Le arrancamos a PyTorch la memoria reservada (CUDA, ROCm y Mac MPS)
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+
+            print(f"   -> ✨ VRAM liberada con éxito. Gráfica lista para nuevos flujos.")
 
         print(f"{'='*50}\n")
         return ()
