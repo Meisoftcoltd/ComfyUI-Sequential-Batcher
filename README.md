@@ -46,4 +46,13 @@ Para montar el flujo secuencial perfecto, sigue estos pasos:
 5. **El Gatillo:** Conecta la salida de tu Stitcher a la entrada del 🚀 Loop Trigger (Auto-Queue).
 6. **Ejecución:** Conecta el 🏁 Loop Start al Cerebro y al Stitcher. Dale a "Queue Prompt" UNA SOLA VEZ (sin marcar Auto Queue en la UI). ¡Disfruta de la magia autónoma!
 
+## 🧹 Auto-Limpieza de VRAM (NUEVO)
+El nodo `SequentialLoopTrigger` ahora actúa como un gestor de limpieza inteligente. Una vez que detecta que se han procesado todos los frames y la generación del video ha finalizado, automáticamente:
+1. Obliga a ComfyUI a soltar de memoria todos los modelos pesados (WanVideo, VAE, etc.).
+2. Fuerza al recolector de basura de Python para eliminar memoria residual en la RAM.
+3. Vacía profundamente las cachés de PyTorch, soportando múltiples plataformas (CUDA/ROCm para NVIDIA/AMD, y MPS para Apple Silicon).
+
+¡Esto asegura que tu gráfica vuelva a 0GB de uso al terminar, previniendo errores OOM en tus siguientes generaciones!
+
+**Changelog v1.5.3:** Se ha introducido un sistema de limpieza profunda automática de VRAM en el nodo `SequentialLoopTrigger`, garantizando que la memoria de la GPU (y RAM) se libere completamente tras la generación de videos pesados en arquitecturas CUDA, ROCm y Mac MPS.
 **Changelog v1.5.2:** Instalación automatizada de FFmpeg, mejora crítica en el bypass del pre-flight check de ComfyUI para inputs dinámicos en el Analyzer, y exposición detallada de excepciones de torchaudio.
