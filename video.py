@@ -80,8 +80,8 @@ class VideoAnalyzerWithAudio:
             waveform, sample_rate = torchaudio.load(video_path)
             source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
             print(f"   -> 🎵 Audio extraído correctamente ({sample_rate}Hz)")
-        except:
-            print(f"   -> ⚠️ Sin audio o error al extraer.")
+        except Exception as e:
+            print(f"   -> ⚠️ Sin audio o error al extraer: {e}")
 
         # 2. Escaneo de OpenCV (Frames, Rostros y Referencia)
         frame_count = 0
