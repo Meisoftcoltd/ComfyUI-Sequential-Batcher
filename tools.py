@@ -85,8 +85,8 @@ class ResTool64x(BaseResolutionTool):
     MIN_PIXELS = 921600  # Hunyuan (Equivale a 1280x720)
 
 @register_node
-class ResTool32xLTX(BaseResolutionTool):
-    DIVISOR = 32
+class ResTool64xLTX(BaseResolutionTool):
+    DIVISOR = 64
     MIN_PIXELS = 393216  # LTX 2.3 (Equivale a 768x512)
 
 

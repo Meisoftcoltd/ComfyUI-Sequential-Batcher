@@ -26,8 +26,8 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "ResTool8x": "📐 ResTool 8x (SD1.5)",
     "ResTool16x": "📏 ResTool 16x (SDXL)",
     "ResTool32x": "🎞️ ResTool 32x (WanVideo)",
-    "ResTool32xLTX": "🌌 ResTool 32x (LTX 2.3)",
     "ResTool64x": "🎬 ResTool 64x (Hunyuan)",
+    "ResTool64xLTX": "🌌 ResTool 64x (LTX 2.3)",
 })
 
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
