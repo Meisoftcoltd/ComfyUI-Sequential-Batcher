@@ -37,6 +37,7 @@ Video processing is divided into highly specialized roles:
 * **🛠️ The Worker (VHS_LoadVideo):** Freed from analytical tasks, this standard ComfyUI node simply extracts the exact tensors the Brain commands.
 * **🎞️ Incremental Auto-Stitcher (The Assembler):** Collects the rendered batches and the pristine original audio track, progressively stitching the final video.
 * **📥 Session Image Receiver** and **📤 Session Image Sender:** Hold and pass the last valid keyframe (reference frame) across iterations to maintain temporal identity coherence.
+* **⏱️ Auto FPS Limiter (The Synchronizer):** Prevents VRAM OOM errors on high framerate videos (e.g., 60 FPS) by automatically calculating the required frame skip (`select_every_nth`) and adjusting the final FPS to ensure audio and motion maintain perfect synchronization.
 * **Protected Resolutions (Megapixel Shield):** Mathematical resolution tools that scale dimensions to avoid artifacts by protecting the "training floor" of each model:
   * **📐 ResTool 8x (SD1.5)**
   * **📏 ResTool 16x (SDXL)**

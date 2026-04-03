@@ -21,6 +21,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "SequentialLoopStart": "🏁 Loop Start (Index)",
     "SequentialLoopTrigger": "🚀 Loop Trigger (Auto-Queue)",
     # Tools
+    "AutoFPSLimiter": "⏱️ Auto FPS Limiter",
     "ResTool8x": "📐 ResTool 8x (SD1.5)",
     "ResTool16x": "📏 ResTool 16x (SDXL)",
     "ResTool32x": "🎞️ ResTool 32x (WanVideo)",
