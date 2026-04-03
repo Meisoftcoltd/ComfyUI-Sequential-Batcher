@@ -83,3 +83,41 @@ class ResTool32x(BaseResolutionTool):
 class ResTool64x(BaseResolutionTool):
     DIVISOR = 64
     MIN_PIXELS = 921600  # Hunyuan (Equivale a 1280x720)
+
+
+@register_node
+class AutoFPSLimiter:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "source_fps": ("FLOAT", {"forceInput": True}),
+                "target_max_fps": ("FLOAT", {"default": 30.0, "min": 1.0, "max": 120.0, "step": 1.0}),
+            }
+        }
+
+    RETURN_TYPES = ("INT", "FLOAT")
+    RETURN_NAMES = ("select_every_nth", "new_fps")
+    FUNCTION = "calculate_fps"
+    CATEGORY = "🔁 Sequential Batcher/Tools"
+
+    def calculate_fps(self, source_fps, target_max_fps):
+        import math
+        print(f"\n{'='*50}")
+        print(f"⏱️ [DEBUG] NODO: Auto FPS Limiter")
+        print(f"   -> FPS Originales: {source_fps:.2f} | Meta Máxima: {target_max_fps:.2f}")
+
+        if source_fps <= target_max_fps:
+            nth = 1
+            new_fps = source_fps
+            print(f"   -> ✅ Los FPS originales ya están dentro del límite.")
+        else:
+            # Calculamos el salto matemático (hacia arriba) para garantizar no superar la meta
+            nth = math.ceil(source_fps / target_max_fps)
+            new_fps = source_fps / nth
+            print(f"   -> ✂️ Reducción necesaria. Procesando 1 de cada {nth} frames.")
+
+        print(f"   -> 🎯 Resultado: {new_fps:.2f} FPS finales (Nth: {nth})")
+        print(f"{'='*50}\n")
+
+        return (nth, new_fps)
