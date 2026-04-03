@@ -40,8 +40,8 @@ class VideoAnalyzerWithAudio:
             }
         }
 
-    RETURN_TYPES = ("STRING", "INT", "FLOAT", "AUDIO", "FACE_CUTS", "IMAGE")
-    RETURN_NAMES = ("video_name", "total_frames", "source_fps", "source_audio", "safe_faces_list", "reference_frame")
+    RETURN_TYPES = ("*", "INT", "FLOAT", "AUDIO", "FACE_CUTS", "IMAGE")
+    RETURN_NAMES = ("video_path", "total_frames", "source_fps", "source_audio", "safe_faces_list", "reference_frame")
     OUTPUT_NODE = True
     FUNCTION = "analyze"
     CATEGORY = "🔁 Sequential Batcher/Video"
