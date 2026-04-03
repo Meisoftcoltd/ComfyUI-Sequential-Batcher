@@ -13,6 +13,7 @@ Una suite de grado profesional de nodos personalizados para ComfyUI. Diseñada p
 * **Cortes Inteligentes (Smart Chunking):** Analiza el vídeo base y realiza cortes matemáticos evitando separar frames donde los rostros son más nítidos, manteniendo la coherencia de identidad.
 * **Extracción de Audio Nativa:** Extrae la pista de audio original directamente desde el nodo inicial y la inyecta de vuelta en el ensamblaje final.
 * **Dual Input Engine:** El nodo explorador acepta tanto vídeos subidos manualmente como rutas inyectadas por cable desde descargadores (ej. YTDLP) comportándose exactamente como VideoHelperSuite.
+* **Soporte Nativo LTX 2.3:** Se han añadido calculadores matemáticos específicos (`AutoLoopCalculatorLTX` y `ResTool32xLTX`) para garantizar que los lotes de vídeo cumplan con las estrictas reglas de descompresión de arquitectura DiT (resoluciones divisibles por 32 y particiones de fotogramas de `8n + 1`).
 
 ---
 

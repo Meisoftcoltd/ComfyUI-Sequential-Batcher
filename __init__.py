@@ -18,6 +18,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "VideoAnalyzerWithAudio": "🕵️ Video Analyzer + Audio",
     "AutoLoopCalculator": "📊 Auto Loop Calculator",
     "AutoLoopCalculatorWan": "📊 Auto Loop Calculator (WanVideo 3dVAE)",
+    "AutoLoopCalculatorLTX": "📊 Auto Loop Calculator (LTX 2.3)",
     "SequentialLoopStart": "🏁 Loop Start (Index)",
     "SequentialLoopTrigger": "🚀 Loop Trigger (Auto-Queue)",
     # Tools
@@ -25,6 +26,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "ResTool8x": "📐 ResTool 8x (SD1.5)",
     "ResTool16x": "📏 ResTool 16x (SDXL)",
     "ResTool32x": "🎞️ ResTool 32x (WanVideo)",
+    "ResTool32xLTX": "🌌 ResTool 32x (LTX 2.3)",
     "ResTool64x": "🎬 ResTool 64x (Hunyuan)",
 })
 
