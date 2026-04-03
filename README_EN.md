@@ -13,6 +13,7 @@ A professional-grade suite of custom nodes for ComfyUI. Designed to bypass VRAM 
 * **Smart Chunking:** Analyzes the base video and performs mathematical cuts avoiding the separation of frames where faces are sharpest, thus maintaining identity coherence.
 * **Native Audio Extraction:** Extracts the original audio track straight from the entry node and seamlessly injects it back into the final stitch.
 * **Dual Input Engine:** The explorer node accepts both manually uploaded videos and dynamically injected string paths from downloaders (e.g., YTDLP), behaving exactly like VideoHelperSuite.
+* **Native LTX 2.3 Support:** Specific mathematical calculators (`AutoLoopCalculatorLTX` and `ResTool64xLTX`) have been added to ensure video batches comply with the strict DiT architecture decompression rules and latent downscale factors (resolutions strictly divisible by 64 and frame partitions of `8n + 1`).
 
 ---
 

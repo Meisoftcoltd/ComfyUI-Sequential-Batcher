@@ -148,6 +148,14 @@ class SessionImageSender:
         if not hasattr(loop, 'global_accumulated_frames'):
             loop.global_accumulated_frames = 0
 
+        # LTX Mode Fix: Avoid counting the overlap frame in the progression
+        ltx_mode_active = getattr(loop, 'global_ltx_mode', False)
+        if ltx_mode_active:
+            # We subtract 1 from frames_accepted to account for the anchor frame
+            # The overlap frame shouldn't advance the global accumulated frames count
+            # since it will be reused as the start of the next chunk.
+            advanced_original_frames = max(1, (frames_accepted - 1) * stride)
+
         loop.global_accumulated_frames += advanced_original_frames
 
         source_total = getattr(loop, 'global_source_frame_count', 1)

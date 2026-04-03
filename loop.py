@@ -12,6 +12,7 @@ global_accumulated_frames = 0
 global_source_frame_count = 1
 global_select_every_nth = 1
 global_server_port = 8188  # 💡 NUEVO: Única fuente de la verdad para el puerto
+global_ltx_mode = False
 
 @register_node
 class SequentialLoopStart:
@@ -38,6 +39,7 @@ class SequentialLoopStart:
         global global_loop_index
         global global_accumulated_frames
         global global_server_port
+        global global_ltx_mode
 
         print(f"\n{'='*50}")
         print(f"🚀 [DEBUG] NODO: Loop Start (Motor Dinámico)")
@@ -60,6 +62,7 @@ class SequentialLoopStart:
         if is_reset or loop_idx == 0:
             global_loop_index = 0
             global_accumulated_frames = 0
+            global_ltx_mode = False # 💡 REINICIO DE SEGURIDAD PARA LTX
             print("   -> 🔄 Bucle y Acumulador reiniciados a 0.")
         else:
             global_loop_index = loop_idx
@@ -67,6 +70,47 @@ class SequentialLoopStart:
         print(f"   -> 📍 Índice actual de bucle: {global_loop_index}")
         print(f"{'='*50}\n")
         return (global_loop_index,)
+
+@register_node
+class AutoLoopCalculatorLTX:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "source_video_frames": ("INT", {"forceInput": True}),
+                "target_chunk_frames": ("INT", {"default": 81, "min": 9, "max": 257, "step": 8}),
+            }
+        }
+
+    RETURN_TYPES = ("INT", "INT")
+    RETURN_NAMES = ("ltx_chunk_size", "total_loops_estimated")
+    FUNCTION = "calculate"
+    CATEGORY = "🔁 Sequential Batcher/Loop"
+
+    def calculate(self, source_video_frames, target_chunk_frames):
+        import math
+
+        # 1. Forzar el chunk a la regla estricta de LTX 2.3: 8n + 1
+        n = max(1, round((target_chunk_frames - 1) / 8))
+        ltx_chunk = (n * 8) + 1
+
+        # 2. Calcular el avance real (Restamos el fotograma 'ancla' de solapamiento)
+        advance_per_loop = ltx_chunk - 1
+        total_loops = math.ceil(source_video_frames / advance_per_loop)
+
+        # Indicador global para el Stitcher y Sender (LTX mode activo)
+        global global_ltx_mode
+        global_ltx_mode = True
+
+        print(f"\n{'='*50}")
+        print(f"📊 [DEBUG] NODO: Auto Loop Calculator (LTX 2.3)")
+        print(f"   -> Frames Totales Origen: {source_video_frames}")
+        print(f"   -> Chunk Solicitado: {target_chunk_frames} | Forzado a LTX (8n+1): {ltx_chunk}")
+        print(f"   -> Avance Real por Bucle: {advance_per_loop} frames")
+        print(f"   -> Total de Bucles Estimados: {total_loops}")
+        print(f"{'='*50}\n")
+
+        return (ltx_chunk, total_loops)
 
 @register_node
 class SequentialLoopTrigger:
