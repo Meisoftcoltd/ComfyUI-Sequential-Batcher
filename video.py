@@ -289,12 +289,28 @@ class AutoLoopCalculatorWan:
         import math
         from . import loop
 
-        # 1. TRUNCADO GLOBAL PARA WANVIDEO (Múltiplo de 4)
-        # Ignoramos el remanente asimétrico del video original para no estrellar el VAE en el ciclo final
-        safe_source_frame_count = (source_frame_count // 4) * 4
+        # --- MEISOFT PATCH: Sincronización Matemática y Ajuste Proporcional ---
+        # 1. Truncado a múltiplo de 4 (Desechamos los 2-3 frames residuales)
+        total_effective_frames = source_frame_count // select_every_nth
+        safe_effective_frames = (total_effective_frames // 4) * 4
+        safe_source_frame_count = safe_effective_frames * select_every_nth
 
         loop.global_source_frame_count = safe_source_frame_count
         loop.global_select_every_nth = select_every_nth
+
+        # 2. Ajuste Proporcional Real (Evitar micro-ciclos al final)
+        estimated_loops = math.ceil(safe_effective_frames / target_frames_per_loop)
+        if estimated_loops > 0:
+            # Repartir los frames equitativamente
+            optimal_target = math.ceil(safe_effective_frames / estimated_loops)
+            # Asegurar que el nuevo target sea múltiplo de 4 (redondeando hacia arriba por seguridad)
+            adjusted_target = ((optimal_target + 3) // 4) * 4
+
+            print(f"   -> ⚖️ Ajuste Proporcional: Target recalculado de {target_frames_per_loop} a {adjusted_target} frames por ciclo (para {estimated_loops} ciclos)")
+            target_frames_per_loop = adjusted_target
+
+        print(f"   -> 📊 Timeline ajustado para VAE: {safe_source_frame_count} / {source_frame_count} (Truncado {source_frame_count - safe_source_frame_count} frames)")
+        # -------------------------------------------------------------
 
         current_pos = getattr(loop, 'global_accumulated_frames', 0)
 
@@ -308,18 +324,7 @@ class AutoLoopCalculatorWan:
 
         frames_left = safe_source_frame_count - current_pos
 
-        # 2. Asegurar que el target per loop es múltiplo de 4 estricto
-        safe_target = (target_frames_per_loop // 4) * 4
-        if safe_target < 4: safe_target = 4
-
-        total_loops = math.ceil(safe_source_frame_count / (safe_target * select_every_nth))
-        if total_loops <= 0: total_loops = 1
-
-        equitable_target = math.floor(safe_source_frame_count / total_loops)
-
-        # 3. Múltiplo de 4 para la meta equitativa
-        equitable_target = (equitable_target // 4) * 4
-        if equitable_target < 4: equitable_target = 4
+        equitable_target = target_frames_per_loop * select_every_nth
 
         ideal_cut = current_pos + equitable_target
 
@@ -341,19 +346,15 @@ class AutoLoopCalculatorWan:
             else:
                 print(f"   -> ⚖️ Sin caras. Forzando corte equitativo x4: {ideal_cut}")
 
-        # 4. Cálculo final del chunk con blindaje absoluto hacia VHS
+        # 4. Cálculo final del chunk consolidado
         effective_chunk_frames = math.ceil((best_cut - current_pos) / select_every_nth)
         effective_chunk_frames = (effective_chunk_frames // 4) * 4
 
-        # Regla de oro de WanVideo: mínimo 4 frames para que el VAE no colapse
         if effective_chunk_frames < 4:
             effective_chunk_frames = 4
 
-        # Control de límites: Si este chunk x4 nos hace pasarnos del total seguro, ajustar al resto exacto
         if current_pos + (effective_chunk_frames * select_every_nth) > safe_source_frame_count:
-            remaining = safe_source_frame_count - current_pos
-            effective_chunk_frames = (remaining // 4) * 4
-            if effective_chunk_frames < 4: effective_chunk_frames = 4
+            effective_chunk_frames = (safe_source_frame_count - current_pos) // select_every_nth
 
         skip_frames = current_pos
 
