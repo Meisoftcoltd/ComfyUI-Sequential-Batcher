@@ -37,6 +37,9 @@ class VideoAnalyzerWithAudio:
                 "reference_frame_idx": ("INT", {"default": 0, "min": 0, "max": 100000, "step": 1}),
                 "use_face_detector": ("BOOLEAN", {"default": True}),
                 "blur_threshold": ("FLOAT", {"default": 100.0, "min": 0.0, "max": 1000.0, "step": 1.0}),
+            },
+            "optional": {
+                "bbox_detector": ("BBOX_DETECTOR", ), # 💡 Puerto para YOLO/ONNX
             }
         }
 
@@ -63,7 +66,7 @@ class VideoAnalyzerWithAudio:
         # Bypass para permitir conexiones dinámicas (como descargas en curso)
         return True
 
-    def analyze(self, video, reference_frame_idx, use_face_detector, blur_threshold, **kwargs):
+    def analyze(self, video, reference_frame_idx, use_face_detector, blur_threshold, bbox_detector=None, **kwargs):
         # Resolución unificada de la ruta, tal como hace VHS
         if os.path.exists(video):
             video_path = video
@@ -121,10 +124,16 @@ class VideoAnalyzerWithAudio:
                 ui_result = {"images": [{"filename": preview_name, "subfolder": "", "type": "temp"}]}
 
             # Escaneo de Rostros
-            if use_face_detector:
+            if bbox_detector is not None or use_face_detector:
                 print(f"   -> 🤖 Iniciando escaneo de rostros (Umbral: {blur_threshold})...")
-                cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-                face_cascade = cv2.CascadeClassifier(cascade_path)
+                if bbox_detector is not None:
+                    print(f"   -> ⚡ Usando detector de rostros por GPU (YOLO/ONNX).")
+                else:
+                    print(f"   -> 🐢 Usando detector de rostros por CPU (OpenCV).")
+
+                if HAS_OPENCV:
+                    cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+                    face_cascade = cv2.CascadeClassifier(cascade_path)
 
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0) # Volver al inicio
                 idx = 0
@@ -136,8 +145,38 @@ class VideoAnalyzerWithAudio:
                     variance = cv2.Laplacian(gray, cv2.CV_64F).var()
 
                     if variance > blur_threshold:
-                        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-                        if len(faces) > 0:
+                        faces_found = False
+
+                        if bbox_detector is not None:
+                            # 1. Convertir el frame (Numpy RGB) al formato nativo Tensor de ComfyUI
+                            # Convert BGR to RGB first
+                            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                            img_tensor = torch.from_numpy(frame_rgb.astype(np.float32) / 255.0).unsqueeze(0).cpu()
+
+                            try:
+                                # 2. Ejecutar inferencia genérica (Soporta Impact Pack y Wananimate BBOX_DETECTOR)
+                                # Firma estándar: detect(image, threshold, dilation, crop_factor, drop_size)
+                                res = bbox_detector.detect(img_tensor, 0.5, 0, 1.0, 10)
+
+                                # 3. Parsear el resultado (Los nodos BBOX devuelven una tupla con SEGS)
+                                if res is not None:
+                                    segs = res[0]
+                                    # Formato ImpactPack: segs es una tupla (shape, [lista_de_segs])
+                                    if isinstance(segs, tuple) and len(segs) > 1 and len(segs[1]) > 0:
+                                        faces_found = True
+                                    # Formato Lista directa (Otros loaders ONNX)
+                                    elif isinstance(segs, list) and len(segs) > 0:
+                                        faces_found = True
+                            except Exception as e:
+                                print(f"   -> ⚠️ Error en detector YOLO/ONNX: {e}")
+
+                        elif HAS_OPENCV and use_face_detector:
+                            # Fallback silencioso a OpenCV si el usuario no conectó el cable ONNX
+                            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+                            if len(faces) > 0:
+                                faces_found = True
+
+                        if faces_found:
                             safe_faces.append(idx)
                     idx += 1
                 print(f"   -> ✅ Encontrados {len(safe_faces)} frames nítidos con rostros.")

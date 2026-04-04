@@ -32,7 +32,7 @@ Para que el nodo `VideoAnalyzerWithAudio` pueda desempaquetar contenedores `.mp4
 ## 🧠 La Arquitectura Híbrida (Cómo funciona)
 El procesamiento de vídeo se divide en roles altamente especializados:
 
-* **🕵️ Video Analyzer + Audio (El Explorador):** Escanea el vídeo vía OpenCV, extrae el audio y escupe un Frame de Referencia visual. Actúa como la puerta de entrada principal.
+* **🕵️ Video Analyzer Face detector + Audio (El Explorador):** Escanea el vídeo vía OpenCV o mediante un modelo YOLO/ONNX acelerado por GPU (opcional) para detección precisa de rostros, extrae el audio y escupe un Frame de Referencia visual. Actúa como la puerta de entrada principal.
 * **📊 Auto Loop Calculator (El Cerebro):** Recibe la biometría del Explorador y calcula las coordenadas de corte asimétricas (chunk_frames, skip_frames) con un margen dinámico del ±10% para evitar minilotes residuales.
 * **📊 Auto Loop Calculator (WanVideo 3dVAE):** Alternativa para WanVideo que asegura que los chunks de frames sean estrictamente múltiplos de 4, protegiendo al VAE 3D de colapsar.
 * **🛠️ El Obrero (VHS_LoadVideo):** Liberado de tareas de análisis, este nodo estándar de ComfyUI se limita a extraer los tensores exactos que el Cerebro le ordena.
@@ -48,7 +48,7 @@ El procesamiento de vídeo se divide en roles altamente especializados:
 ## 🔌 Guía de Cableado (Workflow Setup)
 Para montar el flujo secuencial perfecto, sigue estos pasos:
 
-1. **Setup Inicial:** Coloca el 🕵️ Video Analyzer + Audio al principio. Sube un vídeo o conéctale un cable STRING desde tu descargador favorito.
+1. **Setup Inicial:** Coloca el 🕵️ Video Analyzer Face detector + Audio al principio. Sube un vídeo o conéctale un cable STRING desde tu descargador favorito. Opcionalmente, conecta un nodo 'ONNX Detection Model Loader' a su entrada `bbox_detector` para escaneo de rostros por GPU.
 2. **Matemáticas:** Conecta total_frames y safe_faces_list del Explorador hacia el 📊 Auto Loop Calculator (o 📊 Auto Loop Calculator (WanVideo 3dVAE) si usas WanVideo).
 3. **Extracción:** Añade un nodo VHS_LoadVideo. Haz clic derecho en él -> Convert Widget to Input -> video. Conecta el video_name del Explorador a esta nueva entrada. Alimenta los parámetros de corte desde el Cerebro.
 4. **Passthrough de Audio:** Lleva el cable source_audio desde el Explorador hasta el puerto audio de tu 🎞️ Incremental Auto-Stitcher (al final del flujo).

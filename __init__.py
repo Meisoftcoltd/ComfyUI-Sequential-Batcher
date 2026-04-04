@@ -15,7 +15,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "SessionImageReceiver": "📥 Session Image Receiver",
     "SessionImageSender": "📤 Session Image Sender",
     "IncrementalVideoStitcher": "🎞️ Incremental Auto-Stitcher",
-    "VideoAnalyzerWithAudio": "🕵️ Video Analyzer + Audio",
+    "VideoAnalyzerWithAudio": "🕵️ Video Analyzer Face detector + Audio",
     "AutoLoopCalculator": "📊 Auto Loop Calculator",
     "AutoLoopCalculatorWan": "📊 Auto Loop Calculator (WanVideo 3dVAE)",
     "AutoLoopCalculatorLTX": "📊 Auto Loop Calculator (LTX 2.3)",
