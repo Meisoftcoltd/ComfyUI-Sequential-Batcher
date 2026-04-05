@@ -74,43 +74,99 @@ class SequentialLoopStart:
 @register_node
 class AutoLoopCalculatorLTX:
     @classmethod
-    def INPUT_TYPES(cls):
+    def INPUT_TYPES(s):
         return {
             "required": {
-                "source_video_frames": ("INT", {"forceInput": True}),
-                "target_chunk_frames": ("INT", {"default": 81, "min": 9, "max": 257, "step": 8}),
+                "source_frame_count": ("INT", {"forceInput": True}),
+                "target_frames_per_loop": ("INT", {"default": 81, "min": 9, "max": 257, "step": 8}),
+                "select_every_nth": ("INT", {"default": 1, "min": 1, "max": 100}),
+                "current_loop_index": ("INT", {"forceInput": True}),
+            },
+            "optional": {
+                "safe_faces_list": ("FACE_CUTS", {"forceInput": True}),
             }
         }
 
-    RETURN_TYPES = ("INT", "INT")
-    RETURN_NAMES = ("ltx_chunk_size", "total_loops_estimated")
+    RETURN_TYPES = ("INT", "INT", "INT")
+    RETURN_NAMES = ("chunk_frames", "skip_frames", "select_every_nth")
     FUNCTION = "calculate"
     CATEGORY = "🔁 Sequential Batcher/Loop"
 
-    def calculate(self, source_video_frames, target_chunk_frames):
+    def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index, safe_faces_list=None):
+        # --- Ajuste Proporcional LTX (Regla DiT 8n + 1) ---
         import math
+        from . import loop
 
-        # 1. Forzar el chunk a la regla estricta de LTX 2.3: 8n + 1
-        n = max(1, round((target_chunk_frames - 1) / 8))
-        ltx_chunk = (n * 8) + 1
+        total_effective_frames = source_frame_count // select_every_nth
 
-        # 2. Calcular el avance real (Restamos el fotograma 'ancla' de solapamiento)
-        advance_per_loop = ltx_chunk - 1
-        total_loops = math.ceil(source_video_frames / advance_per_loop)
+        # Truncar al (8n + 1) más cercano hacia abajo
+        if total_effective_frames < 9:
+            safe_effective_frames = total_effective_frames # Too short, bypass
+        else:
+            safe_effective_frames = ((total_effective_frames - 1) // 8) * 8 + 1
+
+        safe_source_frame_count = safe_effective_frames * select_every_nth
+        loop.global_source_frame_count = safe_source_frame_count
+
+        # Ajuste proporcional forzando regla 8n + 1
+        estimated_loops = math.ceil(safe_effective_frames / target_frames_per_loop)
+        if estimated_loops > 0:
+            optimal_target = math.ceil(safe_effective_frames / estimated_loops)
+            # Encontrar el 8n + 1 más cercano hacia arriba para cubrir el total
+            adjusted_target = ((optimal_target - 1 + 7) // 8) * 8 + 1
+            target_frames_per_loop = adjusted_target
+            print(f"   -> ⚖️ Ajuste Proporcional LTX: Target recalculado a {adjusted_target} frames por ciclo.")
+        # -------------------------------------------------------------
+
+        loop.global_select_every_nth = select_every_nth
 
         # Indicador global para el Stitcher y Sender (LTX mode activo)
         global global_ltx_mode
         global_ltx_mode = True
 
+        current_pos = loop.global_accumulated_frames
+
         print(f"\n{'='*50}")
         print(f"📊 [DEBUG] NODO: Auto Loop Calculator (LTX 2.3)")
-        print(f"   -> Frames Totales Origen: {source_video_frames}")
-        print(f"   -> Chunk Solicitado: {target_chunk_frames} | Forzado a LTX (8n+1): {ltx_chunk}")
-        print(f"   -> Avance Real por Bucle: {advance_per_loop} frames")
-        print(f"   -> Total de Bucles Estimados: {total_loops}")
+        print(f"   -> Timeline seguro ajustado a LTX: {current_pos} / {safe_source_frame_count} (Original: {source_frame_count})")
+
+        if current_pos >= safe_source_frame_count:
+            return (1, current_pos, select_every_nth)
+
+        frames_left = safe_source_frame_count - current_pos
+
+        equitable_target = target_frames_per_loop * select_every_nth
+
+        ideal_cut = current_pos + equitable_target
+
+        if frames_left <= equitable_target:
+            best_cut = safe_source_frame_count
+            print(f"   -> 🧮 Absorbiendo resto final: meta fijada en frame {best_cut}")
+        else:
+            best_cut = ideal_cut
+            if safe_faces_list and len(safe_faces_list) > 0:
+                closest_face = min(safe_faces_list, key=lambda x: abs(x - ideal_cut))
+                best_cut = closest_face
+                print(f"   -> ✂️ Corte Inteligente proyectado: {best_cut} (Meta equitativa: {ideal_cut})")
+            else:
+                print(f"   -> ⚖️ Sin caras detectadas. Forzando corte equitativo: {ideal_cut}")
+
+        effective_chunk_frames = math.ceil((best_cut - current_pos) / select_every_nth)
+        # Forzar a 8n + 1
+        effective_chunk_frames = ((effective_chunk_frames - 1) // 8) * 8 + 1
+
+        if effective_chunk_frames < 9:
+            effective_chunk_frames = 9 # Mínimo vital LTX
+
+        if current_pos + (effective_chunk_frames * select_every_nth) > safe_source_frame_count:
+            effective_chunk_frames = (safe_source_frame_count - current_pos) // select_every_nth
+
+        skip_frames = current_pos
+
+        print(f"   -> 🚀 Ciclo {current_loop_index}: Solicitando {effective_chunk_frames} frames efectivos (Saltando {skip_frames})")
         print(f"{'='*50}\n")
 
-        return (ltx_chunk, total_loops)
+        return (effective_chunk_frames, skip_frames, select_every_nth)
 
 @register_node
 class SequentialLoopTrigger:
