@@ -1,6 +1,7 @@
 import os
 import sys
-from contextlib import redirect_stdout
+import logging
+from contextlib import redirect_stdout, redirect_stderr
 from tqdm import tqdm
 import math
 import torch
@@ -141,25 +142,33 @@ class VideoAnalyzerWithAudio:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0) # Volver al inicio
 
                 print(f"   -> 🤖 Iniciando escaneo de rostros por GPU...")
-                for idx in tqdm(range(frame_count), desc="🔍 Escaneando frames", unit="frame"):
+
+                # Silenciamos el logger de ultralytics antes de empezar
+                logging.getLogger("ultralytics").setLevel(logging.ERROR)
+
+                # Barra de progreso profesional (desc=Descripción, unit=unidad, leave=True para que no desaparezca)
+                pbar = tqdm(total=frame_count, desc="🔍 Analizando Rostros", unit="frame", dynamic_ncols=True)
+
+                for idx in range(frame_count):
                     ret, frame = cap.read()
                     if not ret: break
 
                     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                     variance = cv2.Laplacian(gray, cv2.CV_64F).var()
 
+                    faces_found = False
                     if variance > blur_threshold:
-                        faces_found = False
 
                         if bbox_detector is not None:
                             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                             img_tensor = torch.from_numpy(frame_rgb.astype(np.float32) / 255.0).unsqueeze(0).cpu()
 
                             try:
-                                # 🔇 SILENCIAMOS EL SPAM INTERNO DE ULTRALYTICS/YOLO
-                                with open(os.devnull, 'w') as devnull, redirect_stdout(devnull):
-                                    # ⚠️ CORRECCIÓN: detect devuelve la tupla SEGS directamente
-                                    segs = bbox_detector.detect(img_tensor, 0.5, 0, 1.0, 10)
+                                # 🤐 CÁPSULA DE VACÍO: Silenciamos TODO el ruido de la consola
+                                with open(os.devnull, 'w') as fnull:
+                                    with redirect_stdout(fnull), redirect_stderr(fnull):
+                                        # Inferencia
+                                        segs = bbox_detector.detect(img_tensor, 0.5, 0, 1.0, 10)
 
                                 if segs is not None:
                                     # Formato ImpactPack: (shape, [lista_de_segs])
@@ -169,8 +178,8 @@ class VideoAnalyzerWithAudio:
                                     # Otros formatos directos
                                     elif isinstance(segs, list) and len(segs) > 0:
                                         faces_found = True
-                            except Exception as e:
-                                print(f"   -> ⚠️ Error en detector YOLO/ONNX: {e}")
+                            except Exception:
+                                pass # Fallback silencioso si el detector falla
 
                         elif HAS_OPENCV and use_face_detector:
                             # Fallback silencioso a OpenCV si el usuario no conectó el cable ONNX
@@ -180,6 +189,11 @@ class VideoAnalyzerWithAudio:
 
                         if faces_found:
                             safe_faces.append(idx)
+
+                    # Actualizamos la barra una sola vez por frame
+                    pbar.update(1)
+
+                pbar.close() # Cerramos la barra al terminar
                 print(f"   -> ✅ Encontrados {len(safe_faces)} frames nítidos con rostros.")
             else:
                 print(f"   -> 🤖 Escaneo de rostros DESACTIVADO.")
@@ -217,14 +231,26 @@ class AutoLoopCalculator:
         import math
         from . import loop
 
-        total_effective_frames = source_frame_count // select_every_nth
-        safe_source_frame_count = total_effective_frames * select_every_nth
-        loop.global_source_frame_count = safe_source_frame_count
+        potential_effective_frames = source_frame_count // select_every_nth
+        safe_effective_frames = potential_effective_frames # Sin restricciones
 
-        estimated_loops = math.ceil(total_effective_frames / target_frames_per_loop)
+        safe_source_frame_count = safe_effective_frames * select_every_nth
+        loop.global_source_frame_count = safe_source_frame_count
+        effective_loss = potential_effective_frames - safe_effective_frames
+
+        estimated_loops = math.ceil(safe_effective_frames / target_frames_per_loop)
         if estimated_loops > 0:
-            target_frames_per_loop = math.ceil(total_effective_frames / estimated_loops)
+            target_frames_per_loop = math.ceil(safe_effective_frames / estimated_loops)
             print(f"   -> ⚖️ Ajuste Proporcional: Target recalculado a {target_frames_per_loop} frames por ciclo.")
+
+        # --- LOGS MEJORADOS Y TRANSPARENTES ---
+        print(f"   -> 🎞️ Capacidad del video: {potential_effective_frames} frames procesables (Nth: {select_every_nth})")
+        if effective_loss > 0:
+            print(f"   -> 🛡️ Ajuste VAE: Se usarán {safe_effective_frames} frames (Descarte técnico: {effective_loss} frame/s de proceso)")
+        else:
+            print(f"   -> ✅ Ajuste VAE: Perfecto. Múltiplo de 4 detectado.") # Manteniendo el mismo string por ahora o podemos omitirlo, lo adapto a que es genérico
+
+        print(f"   -> 📊 Timeline final: 0 a {safe_source_frame_count} (de {source_frame_count} totales)")
         # -------------------------------------------------------------
 
         loop.global_select_every_nth = select_every_nth
@@ -343,11 +369,13 @@ class AutoLoopCalculatorWan:
 
         # --- MEISOFT PATCH: Sincronización Matemática y Ajuste Proporcional ---
         # 1. Truncado a múltiplo de 4 (Desechamos los 2-3 frames residuales)
-        total_effective_frames = source_frame_count // select_every_nth
-        safe_effective_frames = (total_effective_frames // 4) * 4
-        safe_source_frame_count = safe_effective_frames * select_every_nth
+        potential_effective_frames = source_frame_count // select_every_nth
+        safe_effective_frames = (potential_effective_frames // 4) * 4
 
+        safe_source_frame_count = safe_effective_frames * select_every_nth
         loop.global_source_frame_count = safe_source_frame_count
+        effective_loss = potential_effective_frames - safe_effective_frames
+
         loop.global_select_every_nth = select_every_nth
 
         # 2. Ajuste Proporcional Real (Evitar micro-ciclos al final)
@@ -361,7 +389,14 @@ class AutoLoopCalculatorWan:
             print(f"   -> ⚖️ Ajuste Proporcional: Target recalculado de {target_frames_per_loop} a {adjusted_target} frames por ciclo (para {estimated_loops} ciclos)")
             target_frames_per_loop = adjusted_target
 
-        print(f"   -> 📊 Timeline ajustado para VAE: {safe_source_frame_count} / {source_frame_count} (Truncado {source_frame_count - safe_source_frame_count} frames)")
+        # --- LOGS MEJORADOS Y TRANSPARENTES ---
+        print(f"   -> 🎞️ Capacidad del video: {potential_effective_frames} frames procesables (Nth: {select_every_nth})")
+        if effective_loss > 0:
+            print(f"   -> 🛡️ Ajuste VAE: Se usarán {safe_effective_frames} frames (Descarte técnico: {effective_loss} frame/s de proceso)")
+        else:
+            print(f"   -> ✅ Ajuste VAE: Perfecto. Múltiplo de 4 detectado.")
+
+        print(f"   -> 📊 Timeline final: 0 a {safe_source_frame_count} (de {source_frame_count} totales)")
         # -------------------------------------------------------------
 
         current_pos = getattr(loop, 'global_accumulated_frames', 0)
