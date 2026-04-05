@@ -212,10 +212,20 @@ class AutoLoopCalculator:
     CATEGORY = "🔁 Sequential Batcher/Video"
 
     def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index, safe_faces_list=None):
+        # --- Ajuste Proporcional Base (Sin restricciones VAE) ---
         import math
         from . import loop
 
-        loop.global_source_frame_count = source_frame_count
+        total_effective_frames = source_frame_count // select_every_nth
+        safe_source_frame_count = total_effective_frames * select_every_nth
+        loop.global_source_frame_count = safe_source_frame_count
+
+        estimated_loops = math.ceil(total_effective_frames / target_frames_per_loop)
+        if estimated_loops > 0:
+            target_frames_per_loop = math.ceil(total_effective_frames / estimated_loops)
+            print(f"   -> ⚖️ Ajuste Proporcional: Target recalculado a {target_frames_per_loop} frames por ciclo.")
+        # -------------------------------------------------------------
+
         loop.global_select_every_nth = select_every_nth
 
         current_pos = loop.global_accumulated_frames
@@ -224,18 +234,17 @@ class AutoLoopCalculator:
         print(f"📊 [DEBUG] NODO: Auto Loop Calculator (Motor Dinámico)")
         print(f"   -> Posición en el timeline original: {current_pos} / {source_frame_count}")
 
-        if current_pos >= source_frame_count:
+        if current_pos >= safe_source_frame_count:
             return (1, current_pos, select_every_nth)
 
-        frames_left = source_frame_count - current_pos
+        frames_left = safe_source_frame_count - current_pos
 
-        total_loops = math.ceil(source_frame_count / (target_frames_per_loop * select_every_nth))
-        equitable_target = math.floor(source_frame_count / total_loops)
+        equitable_target = target_frames_per_loop * select_every_nth
 
         ideal_cut = current_pos + equitable_target
 
         if frames_left <= equitable_target:
-            best_cut = source_frame_count
+            best_cut = safe_source_frame_count
             print(f"   -> 🧮 Absorbiendo resto final: meta fijada en frame {best_cut}")
         else:
             best_cut = ideal_cut
@@ -248,6 +257,9 @@ class AutoLoopCalculator:
                 print(f"   -> ⚖️ Sin caras detectadas. Forzando corte equitativo: {ideal_cut}")
 
         effective_chunk_frames = math.ceil((best_cut - current_pos) / select_every_nth)
+        if current_pos + (effective_chunk_frames * select_every_nth) > safe_source_frame_count:
+            effective_chunk_frames = (safe_source_frame_count - current_pos) // select_every_nth
+
         skip_frames = current_pos
 
         print(f"   -> 🚀 Ciclo {current_loop_index}: Solicitando {effective_chunk_frames} frames efectivos (Saltando {skip_frames})")
