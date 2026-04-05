@@ -32,7 +32,7 @@ For the `VideoAnalyzerWithAudio` node to unpack `.mp4` containers and extract au
 ## 🧠 The Hybrid Architecture (How it works)
 Video processing is divided into highly specialized roles:
 
-* **🕵️ Video Analyzer + Audio (The Explorer):** Scans the video via OpenCV, extracts audio, and outputs a visual Reference Frame. It acts as the ultimate main gateway.
+* **🕵️ Video Analyzer Face detector + Audio (The Explorer):** Scans the video via OpenCV or through an optional GPU-accelerated YOLO/ONNX model for precise face detection, extracts the audio and outputs a visual Reference Frame. Acts as the main gateway.
 * **📊 Auto Loop Calculator (The Brain):** Receives biometrics from the Explorer and calculates asymmetric cut coordinates (chunk_frames, skip_frames) featuring a ±10% dynamic margin to avoid residual micro-batches.
 * **📊 Auto Loop Calculator (WanVideo 3dVAE):** An alternative for WanVideo that ensures frame chunks are strictly multiples of 4, protecting the 3D VAE from crashing.
 * **🛠️ The Worker (VHS_LoadVideo):** Freed from analytical tasks, this standard ComfyUI node simply extracts the exact tensors the Brain commands.
@@ -48,7 +48,7 @@ Video processing is divided into highly specialized roles:
 ## 🔌 Wiring Guide (Workflow Setup)
 To build the perfect sequential workflow, follow these steps:
 
-1. **Initial Setup:** Place the 🕵️ Video Analyzer + Audio at the very beginning. Upload a video or connect a STRING cable from your favorite downloader.
+1. **Initial Setup:** Place the 🕵️ Video Analyzer Face detector + Audio at the beginning. Upload a video or connect a STRING cable to it from your favorite downloader. Optionally, connect an 'ONNX Detection Model Loader' node to its `bbox_detector` input for GPU face scanning.
 2. **The Math:** Route total_frames and safe_faces_list from the Explorer into the 📊 Auto Loop Calculator (or 📊 Auto Loop Calculator (WanVideo 3dVAE) if using WanVideo).
 3. **Extraction:** Add a VHS_LoadVideo node. Right-click on it -> Convert Widget to Input -> video. Connect the video_name from the Explorer to this new input. Feed the cutting parameters from the Brain.
 4. **Audio Passthrough:** Route the source_audio cable from the Explorer all the way to the audio port of your 🎞️ Incremental Auto-Stitcher (at the end of your workflow).
