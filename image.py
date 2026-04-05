@@ -159,21 +159,30 @@ class SessionImageSender:
         loop.global_accumulated_frames += advanced_original_frames
 
         source_total = getattr(loop, 'global_source_frame_count', 1)
+
+        # 🚀 NUEVO: Detectar si es el ciclo final o un ciclo único
+        is_final_cycle = loop.global_accumulated_frames >= source_total
+
         print(f"   -> ✂️ Tensor truncado a {frames_accepted} frames válidos.")
         print(f"   -> 📈 Timeline avanzado a {loop.global_accumulated_frames} / {source_total}")
 
         last_frame = valid_images[-1:].clone().cpu()
         global_session_image = last_frame
 
-        out_dir = folder_paths.get_output_directory()
-        filename = f"keyframe_{loop_idx:03d}.png"
-        filepath = os.path.join(out_dir, filename)
+        # 🛡️ Solo guardamos el keyframe si habrá un próximo ciclo
+        if not is_final_cycle:
+            out_dir = folder_paths.get_output_directory()
+            filename = f"keyframe_{loop_idx:03d}.png"
+            filepath = os.path.join(out_dir, filename)
 
-        img_array = 255. * last_frame[0].numpy()
-        img = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
-        img.save(filepath)
+            img_array = 255. * last_frame[0].numpy()
+            img = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
+            img.save(filepath)
 
-        print(f"   -> 💾 Keyframe seguro guardado: {filename}")
+            print(f"   -> 💾 Keyframe seguro guardado: {filename}")
+        else:
+            print(f"   -> 🚀 Ciclo final/único detectado. Omitiendo guardado de keyframe.")
+
         print(f"{'='*50}\n")
 
         ui_image = tensor_to_temp_image(last_frame, "sender")
