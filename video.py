@@ -306,8 +306,8 @@ class IncrementalVideoStitcher:
             }
         }
 
-    RETURN_TYPES = ("IMAGE", "AUDIO")
-    RETURN_NAMES = ("ALL_IMAGES", "AUDIO_OUT")
+    RETURN_TYPES = ("IMAGE", "AUDIO", "BOOLEAN")
+    RETURN_NAMES = ("ALL_IMAGES", "AUDIO_OUT", "IS_FINAL_CYCLE")
     FUNCTION = "stitch"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
@@ -322,25 +322,31 @@ class IncrementalVideoStitcher:
         torch.save(images.cpu(), path)
         print(f"🎞️ [Stitcher] Lote {current_loop_index} guardado en disco ({images.shape[0]} frames).")
 
-        is_final = loop.global_accumulated_frames >= loop.global_source_frame_count
+        source_total = getattr(loop, 'global_source_frame_count', 1)
+        is_final_cycle = loop.global_accumulated_frames >= source_total
 
-        if not is_final:
-            preview_frame = images[0:1]
-            return (preview_frame, None)
+        if is_final_cycle:
+            print(f"   -> 🏁 Generación completa. Liberando tensor total al flujo para procesos finales.")
+            print(f"📦 [Stitcher] Ensamblando todos los lotes de vídeo...")
+            all_tensors = []
+            for i in range(current_loop_index + 1):
+                p = os.path.join(cache_dir, f"batch_{i:04d}.pt")
+                if os.path.exists(p):
+                    all_tensors.append(torch.load(p))
+                    try: os.remove(p)
+                    except: pass
 
-        print(f"📦 [Stitcher] Ensamblando todos los lotes de vídeo...")
-        all_tensors = []
-        for i in range(current_loop_index + 1):
-            p = os.path.join(cache_dir, f"batch_{i:04d}.pt")
-            if os.path.exists(p):
-                all_tensors.append(torch.load(p))
-                try: os.remove(p)
-                except: pass
+            final_tensor = torch.cat(all_tensors, dim=0)
+            print(f"✅ [Stitcher] Vídeo completado: {final_tensor.shape[0]} frames ensamblados.")
 
-        final_images = torch.cat(all_tensors, dim=0)
-        print(f"✅ [Stitcher] Vídeo completado: {final_images.shape[0]} frames ensamblados.")
+            # 🚀 Retornamos True al final
+            return (final_tensor, audio, True)
+        else:
+            print(f"   -> ⏳ Ciclo intermedio. Soltando 1 frame dummy...")
+            dummy_frame = images[-1:].clone()
 
-        return (final_images, audio)
+            # 🚀 Retornamos False al final
+            return (dummy_frame, None, False)
 
 @register_node
 class AutoLoopCalculatorWan:
