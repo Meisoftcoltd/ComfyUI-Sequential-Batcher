@@ -55,6 +55,16 @@ Para montar el flujo secuencial perfecto, sigue estos pasos:
 5. **El Gatillo:** Conecta la salida de tu Stitcher a la entrada del 🚀 Loop Trigger (Auto-Queue).
 6. **Ejecución:** Conecta el 🏁 Loop Start (Index) al Cerebro y al Stitcher. Dale a "Queue Prompt" UNA SOLA VEZ (sin marcar Auto Queue en la UI). ¡Disfruta de la magia autónoma!
 
+## 🚀 Aceleración por GPU para el Escaneo de Rostros (NUEVO)
+El nodo `VideoAnalyzerWithAudio` ahora cuenta con un puerto de entrada opcional llamado `bbox_detector`. Esto permite delegar el escaneo facial a tu tarjeta gráfica, multiplicando la velocidad de análisis masivamente.
+
+**Cómo usarlo:**
+1. Instala el popular **Impact Pack**.
+2. Añade el nodo `UltralyticsDetectorProvider` a tu lienzo.
+3. Selecciona un modelo de rostros (ej. `bbox/face_yolov8m.pt`).
+4. Conecta la salida `BBOX_DETECTOR` a la nueva entrada de nuestro nodo Explorador.
+*Nota: Si no conectas nada a este puerto, el nodo usará un escaneo estándar por CPU (OpenCV) como método de respaldo.*
+
 ## 🧹 Auto-Limpieza de VRAM (NUEVO)
 El nodo `SequentialLoopTrigger` ahora actúa como un gestor de limpieza inteligente. Una vez que detecta que se han procesado todos los frames y la generación del video ha finalizado, automáticamente:
 1. Obliga a ComfyUI a soltar de memoria todos los modelos pesados (WanVideo, VAE, etc.).

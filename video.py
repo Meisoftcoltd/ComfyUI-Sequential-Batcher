@@ -1,4 +1,7 @@
 import os
+import sys
+from contextlib import redirect_stdout
+from tqdm import tqdm
 import math
 import torch
 import torchaudio
@@ -136,8 +139,9 @@ class VideoAnalyzerWithAudio:
                     face_cascade = cv2.CascadeClassifier(cascade_path)
 
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0) # Volver al inicio
-                idx = 0
-                while True:
+
+                print(f"   -> 🤖 Iniciando escaneo de rostros por GPU...")
+                for idx in tqdm(range(frame_count), desc="🔍 Escaneando frames", unit="frame"):
                     ret, frame = cap.read()
                     if not ret: break
 
@@ -148,23 +152,21 @@ class VideoAnalyzerWithAudio:
                         faces_found = False
 
                         if bbox_detector is not None:
-                            # 1. Convertir el frame (Numpy RGB) al formato nativo Tensor de ComfyUI
-                            # Convert BGR to RGB first
                             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                             img_tensor = torch.from_numpy(frame_rgb.astype(np.float32) / 255.0).unsqueeze(0).cpu()
 
                             try:
-                                # 2. Ejecutar inferencia genérica (Soporta Impact Pack y Wananimate BBOX_DETECTOR)
-                                # Firma estándar: detect(image, threshold, dilation, crop_factor, drop_size)
-                                res = bbox_detector.detect(img_tensor, 0.5, 0, 1.0, 10)
+                                # 🔇 SILENCIAMOS EL SPAM INTERNO DE ULTRALYTICS/YOLO
+                                with open(os.devnull, 'w') as devnull, redirect_stdout(devnull):
+                                    # ⚠️ CORRECCIÓN: detect devuelve la tupla SEGS directamente
+                                    segs = bbox_detector.detect(img_tensor, 0.5, 0, 1.0, 10)
 
-                                # 3. Parsear el resultado (Los nodos BBOX devuelven una tupla con SEGS)
-                                if res is not None:
-                                    segs = res[0]
-                                    # Formato ImpactPack: segs es una tupla (shape, [lista_de_segs])
-                                    if isinstance(segs, tuple) and len(segs) > 1 and len(segs[1]) > 0:
-                                        faces_found = True
-                                    # Formato Lista directa (Otros loaders ONNX)
+                                if segs is not None:
+                                    # Formato ImpactPack: (shape, [lista_de_segs])
+                                    if isinstance(segs, tuple) and len(segs) == 2 and isinstance(segs[1], list):
+                                        if len(segs[1]) > 0:
+                                            faces_found = True
+                                    # Otros formatos directos
                                     elif isinstance(segs, list) and len(segs) > 0:
                                         faces_found = True
                             except Exception as e:
@@ -178,7 +180,6 @@ class VideoAnalyzerWithAudio:
 
                         if faces_found:
                             safe_faces.append(idx)
-                    idx += 1
                 print(f"   -> ✅ Encontrados {len(safe_faces)} frames nítidos con rostros.")
             else:
                 print(f"   -> 🤖 Escaneo de rostros DESACTIVADO.")

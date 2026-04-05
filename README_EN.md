@@ -55,6 +55,16 @@ To build the perfect sequential workflow, follow these steps:
 5. **The Trigger:** Connect your Stitcher's output to the 🚀 Loop Trigger (Auto-Queue) input.
 6. **Execution:** Wire the 🏁 Loop Start (Index) to the Brain and the Stitcher. Press "Queue Prompt" ONLY ONCE (do not check Auto Queue in the UI). Sit back and enjoy the autonomous magic!
 
+## 🚀 GPU Acceleration for Face Scanning (NEW)
+The `VideoAnalyzerWithAudio` node now features an optional input port named `bbox_detector`. This allows you to offload facial scanning to your graphics card, massively multiplying the analysis speed.
+
+**How to use it:**
+1. Install the popular **Impact Pack**.
+2. Add the `UltralyticsDetectorProvider` node to your canvas.
+3. Select a face model (e.g., `bbox/face_yolov8m.pt`).
+4. Connect the `BBOX_DETECTOR` output to the new input of our Explorer node.
+*Note: If you leave this port unconnected, the node will seamlessly fall back to standard CPU scanning (OpenCV).*
+
 ## 🧹 Auto VRAM Cleanup (NEW)
 The `SequentialLoopTrigger` node now acts as an intelligent cleanup manager. Once it detects that all frames have been processed and video generation has finished, it automatically:
 1. Forces ComfyUI to release all heavy models from memory (WanVideo, VAE, etc.).
