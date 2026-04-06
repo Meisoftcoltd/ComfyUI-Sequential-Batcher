@@ -28,6 +28,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "ResTool32x": "🎞️ ResTool 32x (WanVideo)",
     "ResTool64x": "🎬 ResTool 64x (Hunyuan)",
     "ResTool64xLTX": "🌌 ResTool 64x (LTX 2.3)",
+    "ConditionalAudioRouter": "🎛️ Conditional Audio Router (Bypass)",
 })
 
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']

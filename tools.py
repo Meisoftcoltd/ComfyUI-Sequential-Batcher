@@ -1,4 +1,5 @@
 import math
+import torch
 from . import register_node
 
 # 🧠 Clase Base Invisible (El molde matemático por Megapíxeles)
@@ -126,3 +127,38 @@ class AutoFPSLimiter:
         print(f"{'='*50}\n")
 
         return (nth, new_fps)
+
+@register_node
+class ConditionalAudioRouter:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "audio": ("AUDIO",),
+                "is_final_cycle": ("BOOLEAN", {"forceInput": True}),
+            }
+        }
+
+    RETURN_TYPES = ("AUDIO",)
+    RETURN_NAMES = ("routed_audio",)
+    FUNCTION = "route"
+    CATEGORY = "🔁 Sequential Batcher/Tools"
+
+    def route(self, audio, is_final_cycle):
+        if is_final_cycle:
+            print("   -> 🔊 [Audio Router] Ciclo Final: Enviando pista de audio completa al Lip Sync.")
+            return (audio,)
+        else:
+            print("   -> 🔇 [Audio Router] Ciclo Intermedio: Generando micro-silencio para bypasear el Lip Sync...")
+
+            # Detectar el sample rate del audio original (estándar de ComfyUI es un dict)
+            sample_rate = 44100
+            if isinstance(audio, dict) and "sample_rate" in audio:
+                sample_rate = audio["sample_rate"]
+
+            # Creamos 0.1 segundos de silencio absoluto (1 canal, mínimos samples)
+            samples = int(sample_rate * 0.1)
+            dummy_waveform = torch.zeros((1, 1, samples), dtype=torch.float32)
+            dummy_audio = {"waveform": dummy_waveform, "sample_rate": sample_rate}
+
+            return (dummy_audio,)
