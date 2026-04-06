@@ -296,6 +296,9 @@ class AutoLoopCalculator:
 
 @register_node
 class IncrementalVideoStitcher:
+    # 1. Variable de clase para memoria interna autónoma
+    _autonomous_frame_count = 0
+
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -315,6 +318,13 @@ class IncrementalVideoStitcher:
         from . import loop
         import os, folder_paths, torch
 
+        # 2. Resetear el contador si es un renderizado nuevo
+        if current_loop_index == 0:
+            IncrementalVideoStitcher._autonomous_frame_count = 0
+
+        # 3. Sumar inmediatamente los frames que acabamos de recibir
+        IncrementalVideoStitcher._autonomous_frame_count += images.shape[0]
+
         cache_dir = os.path.join(folder_paths.get_temp_directory(), "wan_stitcher_cache")
         os.makedirs(cache_dir, exist_ok=True)
 
@@ -322,11 +332,16 @@ class IncrementalVideoStitcher:
         torch.save(images.cpu(), path)
         print(f"🎞️ [Stitcher] Lote {current_loop_index} guardado en disco ({images.shape[0]} frames).")
 
+        # 4. Calcular el objetivo matemático
         source_total = getattr(loop, 'global_source_frame_count', 1)
-        is_final_cycle = loop.global_accumulated_frames >= source_total
+        nth = getattr(loop, 'global_select_every_nth', 1)
+        expected_total_frames = source_total // nth
+
+        # 5. Evaluación 100% ciega a las variables globales de progreso
+        is_final_cycle = IncrementalVideoStitcher._autonomous_frame_count >= expected_total_frames
 
         if is_final_cycle:
-            print(f"   -> 🏁 Generación completa. Liberando tensor total al flujo para procesos finales.")
+            print(f"   -> 🏁 Generación completa ({IncrementalVideoStitcher._autonomous_frame_count}/{expected_total_frames}). Liberando tensor total al flujo para procesos finales.")
             print(f"📦 [Stitcher] Ensamblando todos los lotes de vídeo...")
             all_tensors = []
             for i in range(current_loop_index + 1):
@@ -342,7 +357,7 @@ class IncrementalVideoStitcher:
             # 🚀 Retornamos True al final
             return (final_tensor, audio, True)
         else:
-            print(f"   -> ⏳ Ciclo intermedio. Soltando 1 frame dummy...")
+            print(f"   -> ⏳ Ciclo intermedio ({IncrementalVideoStitcher._autonomous_frame_count}/{expected_total_frames}). Soltando 1 frame dummy...")
             dummy_frame = images[-1:].clone()
 
             # 🚀 Retornamos False al final
