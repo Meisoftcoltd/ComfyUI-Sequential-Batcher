@@ -10,8 +10,14 @@ def register_node(c, display_name=None):
 
 # Importar tools
 from . import image, loop, video, tools
+from .switch_node import MasterSwitch
+
+NODE_CLASS_MAPPINGS.update({
+    "MasterSwitch": MasterSwitch,
+})
 
 NODE_DISPLAY_NAME_MAPPINGS.update({
+    "MasterSwitch": "🔀 Master Switch",
     "SessionImageReceiver": "📥 Session Image Receiver",
     "SessionImageSender": "📤 Session Image Sender",
     "IncrementalVideoStitcher": "🎞️ Incremental Auto-Stitcher",

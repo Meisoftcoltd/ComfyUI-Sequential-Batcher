@@ -215,16 +215,46 @@ class SequentialLoopTrigger:
         if not is_final:
             print(f"   -> ⚙️ Preparando Ciclo {next_loop}...")
             if prompt is not None:
+                # 🧠 HACKER MODE: Estimamos si el ciclo que vamos a encolar es el final
+                estimated_chunk = 50
+                for node_id, node_data in prompt.items():
+                    if "AutoLoopCalculator" in node_data.get("class_type", ""):
+                        # Rescata el chunk estimado del calculador en uso
+                        estimated_chunk = node_data.get("inputs", {}).get("target_frames_per_loop", 50)
+                        break
+
+                is_next_final = (global_accumulated_frames + estimated_chunk) >= global_source_frame_count
+
                 m_seeds = 0
                 for node_id, node_data in prompt.items():
                     inputs = node_data.get("inputs", {})
+
+                    # Mutación de semillas
                     for key in ["seed", "noise_seed"]:
                         if key in inputs and isinstance(inputs[key], (int, float)):
                             inputs[key] = random.randint(1, 0xffffffff)
                             m_seeds += 1
+
+                    # Mutación de índice
                     if node_data.get("class_type") == "SequentialLoopStart":
                         inputs["loop_idx"] = next_loop
                         inputs["reset_loop"] = False
+
+                    # 🔪 CIRUGÍA DE GRAFO EN CALIENTE
+                    if node_data.get("class_type") == "MasterSwitch":
+                        print(f"   -> 🔀 [Cirugía de Grafo] Mutando Master Switch para Ciclo {next_loop}...")
+                        # Sobrescribimos el cable que viene del Stitcher por un booleano estático
+                        inputs["is_final_cycle"] = is_next_final
+
+                        if is_next_final:
+                            if "on_false" in inputs:
+                                del inputs["on_false"]
+                                print(f"      ✂️ Cable 'on_false' eliminado (Ahorro de VRAM en ruta inactiva).")
+                        else:
+                            if "on_true" in inputs:
+                                del inputs["on_true"]
+                                print(f"      ✂️ Cable 'on_true' eliminado (Ruta pesada desconectada).")
+
                 print(f"   -> 🎲 Semillas mutadas: {m_seeds}")
 
             p = {"prompt": prompt}

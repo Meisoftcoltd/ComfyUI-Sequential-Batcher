@@ -39,6 +39,7 @@ El procesamiento de vídeo se divide en roles altamente especializados:
 * **🎞️ Incremental Auto-Stitcher (El Ensamblador):** Recoge los lotes renderizados y la pista de audio original, cosiendo el vídeo final de forma progresiva.
 * **📥 Session Image Receiver** y **📤 Session Image Sender:** Retienen y transfieren el último keyframe válido (frame de referencia) a través de los ciclos para mantener la coherencia temporal de la identidad.
 * **⏱️ Auto FPS Limiter (El Sincronizador):** Previene errores de VRAM en vídeos de alta tasa de fotogramas (ej. 60 FPS) calculando automáticamente el salto de frames necesario (`select_every_nth`) y ajustando los FPS finales para garantizar que el audio y el movimiento mantengan una sincronización perfecta.
+* **🔀 Master Switch (Evaluación Perezosa y Cirugía de Grafo):** Nodo lógico avanzado que utiliza *Evaluación Perezosa Nativa* en el Ciclo 0 y *Cirugía de Grafo en Caliente* en ciclos posteriores. Amputa físicamente los cables de rutas inactivas en el JSON enviado a ComfyUI, asegurando que los nodos pesados (como Lip Syncs o Upscalers) ni siquiera se carguen en memoria cuando no se necesitan, lo que representa un ahorro masivo de VRAM.
 * **Resoluciones Protegidas (Megapixel Shield):** Herramientas de resolución matemáticas que escalan las dimensiones para evitar artefactos protegiendo el "training floor" de cada modelo:
   * **📐 ResTool 8x (SD1.5)**
   * **📏 ResTool 16x (SDXL)**
