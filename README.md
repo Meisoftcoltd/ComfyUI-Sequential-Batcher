@@ -1,5 +1,5 @@
 # ♾️ ComfyUI Sequential Batcher
-**v1.5.2** | **VRAM-Optimized Generation** | **Recursive Self-Queuing**
+**v1.5.4** | **VRAM-Optimized Generation** | **Recursive Self-Queuing**
 
 Una suite de grado profesional de nodos personalizados para ComfyUI. Diseñada para sortear los límites de VRAM en la generación de vídeo pesado (WanVideo, Hunyuan, etc.) mediante **Auto-Encolado Recursivo** y procesamiento autónomo lote por lote.
 
@@ -66,13 +66,14 @@ El nodo `VideoAnalyzerWithAudio` ahora cuenta con un puerto de entrada opcional 
 4. Conecta la salida `BBOX_DETECTOR` a la nueva entrada de nuestro nodo Explorador.
 *Nota: Si no conectas nada a este puerto, el nodo usará un escaneo estándar por CPU (OpenCV) como método de respaldo.*
 
-## 🧹 Auto-Limpieza de VRAM (NUEVO)
-El nodo `SequentialLoopTrigger` ahora actúa como un gestor de limpieza inteligente. Una vez que detecta que se han procesado todos los frames y la generación del video ha finalizado, automáticamente:
-1. Obliga a ComfyUI a soltar de memoria todos los modelos pesados (WanVideo, VAE, etc.).
-2. Fuerza al recolector de basura de Python para eliminar memoria residual en la RAM.
-3. Vacía profundamente las cachés de PyTorch, soportando múltiples plataformas (CUDA/ROCm para NVIDIA/AMD, y MPS para Apple Silicon).
+## 🧹 Auto-Limpieza y Desfragmentación Profunda de VRAM (NUEVO)
+El entorno ahora implementa un blindaje anti-fragmentación de nivel forense, esencial para modelos masivos como WanVideo:
+* **Secuencia Sagrada de Destrucción:** El nodo `VRAM Defragmenter` ejecuta una secuencia estricta de limpieza (Romper ciclos Python -> Evacuación Suave -> Descarga de Modelos -> Limpieza IPC -> Vaciado CUDA -> Sincronización de Hilos) para eliminar fragmentos huérfanos y prevenir *race conditions* asíncronas con kernels de Triton (como SageAttention).
+* **Asignador de Memoria Bloqueado:** Se inyecta la variable de entorno `PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:128"` automáticamente al inicio para prohibir a PyTorch trocear bloques de VRAM mayores a 128 MB, garantizando bloques continuos masivos para los samplers.
+* **Auto-Descarga del Explorador:** El nodo `VideoAnalyzerWithAudio` ahora incluye la opción `unload_detector` para destruir inmediatamente de la VRAM el modelo de detección facial una vez finalizado el escaneo, liberando espacio crítico antes de que comience la generación pesada.
 
-¡Esto asegura que tu gráfica vuelva a 0GB de uso al terminar, previniendo errores OOM en tus siguientes generaciones!
+El nodo `SequentialLoopTrigger` además actúa como gestor de limpieza de cierre, forzando a ComfyUI a soltar todos los modelos pesados al terminar la generación del vídeo. ¡Esto asegura que tu gráfica vuelva a 0GB de uso, previniendo errores OOM!
 
+**Changelog v1.5.4:** Implementación de "Secuencia Sagrada" de limpieza en `VRAM Defragmenter`, inyección de entorno anti-micro-fragmentación de PyTorch (`max_split_size_mb:128`), y auto-destrucción temprana del detector de rostros en el Analyzer.
 **Changelog v1.5.3:** Se ha introducido un sistema de limpieza profunda automática de VRAM en el nodo `SequentialLoopTrigger`, garantizando que la memoria de la GPU (y RAM) se libere completamente tras la generación de videos pesados en arquitecturas CUDA, ROCm y Mac MPS.
 **Changelog v1.5.2:** Instalación automatizada de FFmpeg, mejora crítica en el bypass del pre-flight check de ComfyUI para inputs dinámicos en el Analyzer, y exposición detallada de excepciones de torchaudio.
