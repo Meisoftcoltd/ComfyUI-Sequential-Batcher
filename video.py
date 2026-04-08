@@ -11,6 +11,9 @@ import nodes
 import time
 from . import register_node
 
+# Aseguramos que torch esté disponible globalmente para los bloques de limpieza
+import torch
+
 # Intento de carga de OpenCV para el Director de Fotografía
 try:
     import cv2
@@ -41,6 +44,7 @@ class VideoAnalyzerWithAudio:
                 "reference_frame_idx": ("INT", {"default": 0, "min": 0, "max": 100000, "step": 1}),
                 "use_face_detector": ("BOOLEAN", {"default": True}),
                 "blur_threshold": ("FLOAT", {"default": 100.0, "min": 0.0, "max": 1000.0, "step": 1.0}),
+                "unload_detector_after_analysis": ("BOOLEAN", {"default": True}),
             },
             "optional": {
                 "bbox_detector": ("BBOX_DETECTOR", ), # 💡 Puerto para YOLO/ONNX
@@ -70,7 +74,7 @@ class VideoAnalyzerWithAudio:
         # Bypass para permitir conexiones dinámicas (como descargas en curso)
         return True
 
-    def analyze(self, video, reference_frame_idx, use_face_detector, blur_threshold, bbox_detector=None, **kwargs):
+    def analyze(self, video, reference_frame_idx, use_face_detector, blur_threshold, unload_detector_after_analysis=True, bbox_detector=None, **kwargs):
         # Resolución unificada de la ruta, tal como hace VHS
         if os.path.exists(video):
             video_path = video
@@ -195,6 +199,16 @@ class VideoAnalyzerWithAudio:
 
                 pbar.close() # Cerramos la barra al terminar
                 print(f"   -> ✅ Encontrados {len(safe_faces)} frames nítidos con rostros.")
+
+                # Descarga de VRAM
+                if unload_detector_after_analysis:
+                    print(f"   -> 🧹 Descargando detector de rostros de la VRAM...")
+                    import gc
+                    import comfy.model_management as mm
+                    mm.unload_all_models()
+                    gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
             else:
                 print(f"   -> 🤖 Escaneo de rostros DESACTIVADO.")
 

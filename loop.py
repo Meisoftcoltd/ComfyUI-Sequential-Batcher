@@ -267,6 +267,15 @@ class SequentialLoopTrigger:
                 print(f"   -> ✅ Ciclo {next_loop} inyectado en la cola.")
             except Exception as e:
                 print(f"   -> ❌ Error HTTP: {e}")
+
+            # Limpieza ligera por ciclo para evitar fragmentación
+            import gc
+            import torch
+            import comfy.model_management as mm
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
         else:
             print(f"   -> 🏁 ¡Generación Finalizada! Todos los frames ensamblados.")
             global_loop_index = 0
@@ -274,6 +283,9 @@ class SequentialLoopTrigger:
 
             # --- LIMPIEZA EXTREMA DE VRAM AUTOMÁTICA (Multi-Plataforma) ---
             print(f"   -> 🧹 Iniciando vaciado automático de VRAM...")
+            import gc
+            import torch
+            import comfy.model_management as mm
             try:
                 # 1. Obligamos al motor interno de ComfyUI a soltar los modelos
                 mm.unload_all_models()
@@ -288,6 +300,13 @@ class SequentialLoopTrigger:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
+
+                # HACK: Forzar la desfragmentación de la memoria caché de PyTorch
+                import ctypes
+                try:
+                    ctypes.CDLL('libc.so.6').malloc_trim(0)
+                except Exception:
+                    pass
             elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
                 torch.mps.empty_cache()
 
