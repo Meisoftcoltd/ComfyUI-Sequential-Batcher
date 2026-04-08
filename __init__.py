@@ -1,3 +1,9 @@
+import os
+
+# Inyección algorítmica para evitar micro-fragmentación de VRAM en WanVideo
+if "PYTORCH_CUDA_ALLOC_CONF" not in os.environ:
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+
 __version__ = "1.5.1"
 
 NODE_CLASS_MAPPINGS = {}

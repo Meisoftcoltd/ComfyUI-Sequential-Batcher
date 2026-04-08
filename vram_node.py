@@ -29,23 +29,25 @@ class MeisoftVRAMDefragmenter:
         print(f"\n{'='*50}")
         print(f"🧹 [DEBUG] NODO: VRAM Defragmenter (Pasarela)")
 
-        # 1. Forzar descarga de modelos a la RAM si el usuario lo pide
-        if force_model_unload:
-            print("   -> 📦 Trasladando modelos inactivos a la memoria RAM (CPU)...")
-            mm.unload_all_models()
-
-        # 2. Recolector de basura de Python (elimina tensores huérfanos)
-        print("   -> 🗑️ Eliminando tensores huérfanos de la memoria...")
+        # Fase 1: Romper ciclos de referencia en Python
         gc.collect()
 
-        # 3. Desfragmentación agresiva del Caching Allocator de CUDA
+        # Fase 2: Evacuación suave nativa
+        mm.soft_empty_cache()
+
+        # Fase 3: Evacuación agresiva (Opcional)
+        if force_model_unload:
+            print("   -> 📦 Trasladando modelos inactivos a la RAM (unload_all_models)...")
+            mm.unload_all_models()
+            gc.collect() # Segunda barrida tras rotura de enlaces
+
+        # Fases 4, 5 y 6: Limpieza IPC, Vaciado CUDA y Sincronización
         if torch.cuda.is_available():
-            print("   -> 🧱 Desfragmentando bloques de memoria CUDA...")
-            torch.cuda.empty_cache()
+            print("   -> 🧱 Purgando memoria IPC y desfragmentando Caching Allocator...")
             torch.cuda.ipc_collect()
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize() # Barrera contra race conditions
 
-        print("   -> ✨ VRAM optimizada. Permitiendo el paso del flujo.")
+        print("   -> ✨ VRAM hiper-optimizada. Permitiendo paso al Sampler.")
         print(f"{'='*50}\n")
-
-        # 4. Devolvemos el mismo dato sin alterarlo (Passthrough)
         return (anything,)
