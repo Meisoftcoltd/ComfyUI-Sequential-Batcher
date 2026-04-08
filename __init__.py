@@ -9,7 +9,7 @@ def register_node(c, display_name=None):
     return c
 
 # Importar tools
-from . import image, loop, video, tools
+from . import image, loop, video, tools, vram_node
 from .switch_node import MasterSwitch
 
 NODE_CLASS_MAPPINGS.update({
@@ -18,6 +18,7 @@ NODE_CLASS_MAPPINGS.update({
 
 NODE_DISPLAY_NAME_MAPPINGS.update({
     "MasterSwitch": "🔀 Master Switch",
+    "MeisoftVRAMDefragmenter": "🧹 VRAM Defragmenter",
     "SessionImageReceiver": "📥 Session Image Receiver",
     "SessionImageSender": "📤 Session Image Sender",
     "IncrementalVideoStitcher": "🎞️ Incremental Auto-Stitcher",
