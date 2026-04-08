@@ -129,8 +129,8 @@ class SessionImageSender:
                         break
 
                 if not found:
-                    print(f"   -> ⚠️ ALERTA: No se detectó rostro frontal en NINGÚN frame. Salvando el ciclo usando el frame 0 por defecto.")
-                    best_idx = 0
+                    print(f"   -> ⚠️ ALERTA: No se detectó rostro frontal en NINGÚN frame. Aceptando todo el lote para evitar bucles infinitos.")
+                    best_idx = batch_size - 1
             except Exception as e:
                 print(f"   -> ⚠️ Error en OpenCV al validar: {e}")
         else:
