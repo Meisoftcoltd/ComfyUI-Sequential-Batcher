@@ -162,14 +162,16 @@ class AutoLoopCalculatorLTX:
                 print(f"   -> ⚖️ Sin caras detectadas. Forzando corte equitativo: {ideal_cut}")
 
         effective_chunk_frames = math.ceil((best_cut - current_pos) / select_every_nth)
-        # Forzar a 8n + 1
-        effective_chunk_frames = ((effective_chunk_frames - 1) // 8) * 8 + 1
+
+        # Redondear siempre hacia ARRIBA al (8n + 1) más cercano
+        effective_chunk_frames = ((effective_chunk_frames + 6) // 8) * 8 + 1
 
         if effective_chunk_frames < 9:
             effective_chunk_frames = 9 # Mínimo vital LTX
 
-        if current_pos + (effective_chunk_frames * select_every_nth) > safe_source_frame_count:
-            effective_chunk_frames = (safe_source_frame_count - current_pos) // select_every_nth
+        # ELIMINAMOS el recorte final que rompe la regla 8n + 1
+        if current_pos + (effective_chunk_frames * select_every_nth) >= safe_source_frame_count:
+            print(f"   -> 🏁 Chunk final LTX detectado. Ajustando a {effective_chunk_frames} frames para mantener regla 8n+1.")
 
         skip_frames = current_pos
 

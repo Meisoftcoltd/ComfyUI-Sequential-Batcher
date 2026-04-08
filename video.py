@@ -468,13 +468,18 @@ class AutoLoopCalculatorWan:
 
         # 4. Cálculo final del chunk consolidado
         effective_chunk_frames = math.ceil((best_cut - current_pos) / select_every_nth)
-        effective_chunk_frames = (effective_chunk_frames // 4) * 4
+
+        # Redondear siempre hacia ARRIBA al múltiplo de 4 más cercano para evitar chunks inválidos
+        effective_chunk_frames = ((effective_chunk_frames + 3) // 4) * 4
 
         if effective_chunk_frames < 4:
             effective_chunk_frames = 4
 
-        if current_pos + (effective_chunk_frames * select_every_nth) > safe_source_frame_count:
-            effective_chunk_frames = (safe_source_frame_count - current_pos) // select_every_nth
+        # ELIMINAMOS el recorte final que rompe el múltiplo de 4.
+        # Si pedimos más frames de los que quedan, VHS duplicará el último frame automáticamente,
+        # salvando así el renderizado sin crashear el 3D VAE.
+        if current_pos + (effective_chunk_frames * select_every_nth) >= safe_source_frame_count:
+            print(f"   -> 🏁 Chunk final detectado. Ajustando a {effective_chunk_frames} frames para mantener múltiplo de 4.")
 
         skip_frames = current_pos
 
