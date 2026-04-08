@@ -45,6 +45,7 @@ class VideoAnalyzerWithAudio:
                 "use_face_detector": ("BOOLEAN", {"default": True}),
                 "blur_threshold": ("FLOAT", {"default": 100.0, "min": 0.0, "max": 1000.0, "step": 1.0}),
                 "unload_detector_after_analysis": ("BOOLEAN", {"default": True}),
+                "unload_detector": ("BOOLEAN", {"default": True}),
             },
             "optional": {
                 "bbox_detector": ("BBOX_DETECTOR", ), # 💡 Puerto para YOLO/ONNX
@@ -213,6 +214,18 @@ class VideoAnalyzerWithAudio:
                 print(f"   -> 🤖 Escaneo de rostros DESACTIVADO.")
 
             cap.release()
+
+        # Auto-limpieza del detector para liberar VRAM inmediatamente
+        if kwargs.get("unload_detector", True):
+            print("   -> 🧹 Descargando modelo del detector de rostros de la VRAM...")
+            if bbox_detector is not None:
+                del bbox_detector
+            if HAS_OPENCV and 'face_cascade' in locals():
+                del face_cascade
+            import gc
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
         print(f"{'='*50}\n")
 
