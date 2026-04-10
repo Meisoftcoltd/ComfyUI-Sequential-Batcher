@@ -3,6 +3,7 @@ import sys
 import logging
 from contextlib import redirect_stdout, redirect_stderr
 from tqdm import tqdm
+import comfy.utils
 import math
 import torch
 import torchaudio
@@ -59,16 +60,12 @@ class VideoAnalyzerWithAudio:
     CATEGORY = "🔁 Sequential Batcher/Video"
 
     @classmethod
-    def IS_CHANGED(cls, video, **kwargs):
-        # VHS procesa las rutas dinámicas resolviéndolas directamente
-        if os.path.exists(video):
-            video_path = video
+    def IS_CHANGED(cls, video, reference_frame_idx, use_face_detector, blur_threshold, **kwargs):
+        if isinstance(video, list):
+            video_str = "".join(video)
         else:
-            video_path = folder_paths.get_annotated_filepath(video)
-
-        if os.path.exists(video_path):
-            return os.path.getmtime(video_path)
-        return time.time()
+            video_str = str(video)
+        return f"{video_str}_{reference_frame_idx}_{use_face_detector}_{blur_threshold}"
 
     @classmethod
     def VALIDATE_INPUTS(cls, **kwargs):
@@ -153,6 +150,7 @@ class VideoAnalyzerWithAudio:
 
                 # Barra de progreso profesional (desc=Descripción, unit=unidad, leave=True para que no desaparezca)
                 pbar = tqdm(total=frame_count, desc="🔍 Analizando Rostros", unit="frame", dynamic_ncols=True)
+                comfy_pbar = comfy.utils.ProgressBar(frame_count)
 
                 for idx in range(frame_count):
                     ret, frame = cap.read()
@@ -197,6 +195,7 @@ class VideoAnalyzerWithAudio:
 
                     # Actualizamos la barra una sola vez por frame
                     pbar.update(1)
+                    comfy_pbar.update(1)
 
                 pbar.close() # Cerramos la barra al terminar
                 print(f"   -> ✅ Encontrados {len(safe_faces)} frames nítidos con rostros.")
