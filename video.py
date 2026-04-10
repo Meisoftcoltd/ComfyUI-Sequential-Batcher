@@ -3,6 +3,7 @@ import sys
 import logging
 from contextlib import redirect_stdout, redirect_stderr
 from tqdm import tqdm
+import comfy.utils
 import math
 import torch
 import torchaudio
@@ -149,6 +150,7 @@ class VideoAnalyzerWithAudio:
 
                 # Barra de progreso profesional (desc=Descripción, unit=unidad, leave=True para que no desaparezca)
                 pbar = tqdm(total=frame_count, desc="🔍 Analizando Rostros", unit="frame", dynamic_ncols=True)
+                comfy_pbar = comfy.utils.ProgressBar(frame_count)
 
                 for idx in range(frame_count):
                     ret, frame = cap.read()
@@ -193,6 +195,7 @@ class VideoAnalyzerWithAudio:
 
                     # Actualizamos la barra una sola vez por frame
                     pbar.update(1)
+                    comfy_pbar.update(1)
 
                 pbar.close() # Cerramos la barra al terminar
                 print(f"   -> ✅ Encontrados {len(safe_faces)} frames nítidos con rostros.")
