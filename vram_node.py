@@ -76,12 +76,22 @@ class MeisoftVRAMDefragmenter:
             torch.cuda.empty_cache()
             torch.cuda.synchronize() # Barrera contra race conditions
 
-        # --- FASE 7: LIBERACIÓN DE MEMORIA DEL SISTEMA (Linux/WSL) ---
+        # --- FASE 7: LIBERACIÓN DE MEMORIA DEL SISTEMA (Multi-Plataforma) ---
+        import platform
         try:
             import ctypes
-            ctypes.CDLL('libc.so.6').malloc_trim(0)
-            print("   -> 💻 Malloc Trim ejecutado (RAM del sistema purgada).")
-        except Exception:
+            if platform.system() == "Windows":
+                # API de Windows: Reduce el 'Working Set' del proceso actual al mínimo
+                kernel32 = ctypes.windll.kernel32
+                current_process = kernel32.GetCurrentProcess()
+                kernel32.SetProcessWorkingSetSize(current_process, -1, -1)
+                print("   -> 💻 Working Set reducido (RAM del sistema purgada en Windows).")
+            else:
+                # API de Linux/WSL: Libera la memoria de la librería C
+                ctypes.CDLL('libc.so.6').malloc_trim(0)
+                print("   -> 💻 Malloc Trim ejecutado (RAM del sistema purgada en Linux/WSL).")
+        except Exception as e:
+            # Si algo falla a nivel de SO, fallamos silenciosamente sin romper el nodo
             pass
 
         # --- ESTADÍSTICAS DESPUÉS ---
