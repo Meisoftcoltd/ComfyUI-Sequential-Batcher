@@ -280,8 +280,6 @@ class SequentialLoopTrigger:
 
         else:
             print(f"   -> 🏁 ¡Generación Finalizada! Todos los frames ensamblados.")
-            global_loop_index = 0
-            global_accumulated_frames = 0
 
             # --- LIMPIEZA EXTREMA DE VRAM AUTOMÁTICA (Multi-Plataforma) ---
             print(f"   -> 🧹 Iniciando vaciado automático de VRAM...")
