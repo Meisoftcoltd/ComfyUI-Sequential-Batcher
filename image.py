@@ -105,9 +105,20 @@ class SessionImageSender:
         batch_size = generated_images.shape[0]
         best_idx = batch_size - 1
 
+        accumulated = getattr(loop, 'global_accumulated_frames', 0)
+        source_total = getattr(loop, 'global_source_frame_count', 1)
+        stride = getattr(loop, 'global_select_every_nth', 1)
+        ltx_mode_active = getattr(loop, 'global_ltx_mode', False)
+
         print(f"\n{'='*50}")
         print(f"📤 [DEBUG] NODO: Image Sender (Filtro Dinámico)")
         print(f"   -> Frames recibidos de la IA: {batch_size}")
+
+        # 🧠 BYPASS IMPLACABLE: Si al sumar este lote llegamos al final del video, NO RECORTAMOS
+        advance_check = (batch_size - 1) * stride if ltx_mode_active else batch_size * stride
+        if (accumulated + advance_check) >= source_total:
+            print(f"   -> 🏁 LOTE FINAL ABSOLUTO DETECTADO. Desactivando recorte de rostros para forzar la salida de TODOS los frames.")
+            detect_faces = False
 
         if detect_faces:
             try:
