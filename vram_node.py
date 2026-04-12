@@ -73,8 +73,8 @@ class MeisoftVRAMDefragmenter:
         if torch.cuda.is_available():
             print("   -> 🧱 Desfragmentando Caching Allocator de CUDA...")
             torch.cuda.ipc_collect()
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize() # Barrera contra race conditions
+            torch.cuda.synchronize() # 🚀 OPTIMIZACIÓN: Esperar a que terminen los kernels pendientes PRIMERO
+            torch.cuda.empty_cache() # 🚀 Luego vaciamos la caché de forma segura
 
         # --- FASE 7: LIBERACIÓN DE MEMORIA DEL SISTEMA (Multi-Plataforma) ---
         import platform
