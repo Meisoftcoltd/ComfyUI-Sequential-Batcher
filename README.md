@@ -8,7 +8,7 @@ Una suite de grado profesional de nodos personalizados para ComfyUI. Diseñada p
 ---
 
 ## 🌟 Lo Nuevo en v1.6.0 (Perfect Sync Update)
-* **🛡️ VAE Safe Frame Padder (Hold Last Frame):** El motor ahora expande dinámicamente los tensores incompletos al final del vídeo. Si faltan frames para cumplir los estrictos requisitos de WanVideo (múltiplos de 4) o LTX (8n+1), clona el último fotograma de forma imperceptible. **Resultado: Cero cuelgues del VAE y 100% de sincronización de audio sin micro-cortes.**
+* **🛡️ VAE Safe Frame Padder (Hold Last Frame):** El motor ahora expande dinámicamente los tensores incompletos al final del vídeo. Si faltan frames para cumplir los estrictos requisitos de WanVideo (regla de `4n + 1`) o LTX (8n+1), clona el último fotograma de forma imperceptible. **Resultado: Cero cuelgues del VAE y 100% de sincronización de audio sin micro-cortes.**
 * **📈 Inversión Matemática a "Expansión":** Los calculadores `AutoLoopCalculatorWan` y `AutoLoopCalculatorLTX` ahora redondean el timeline de forma segura hacia arriba, garantizando fluidez total en ciclos intermedios.
 
 ---
@@ -18,7 +18,7 @@ Una suite de grado profesional de nodos personalizados para ComfyUI. Diseñada p
 * **Orquestación Autónoma:** Convierte tu ComfyUI en un motor de renderizado continuo. Pulsa "Queue Prompt" una sola vez y el flujo se retroalimentará modificando semillas e índices hasta terminar todo el vídeo.
 * **Cortes Inteligentes (Smart Chunking):** Analiza el vídeo base y realiza cortes matemáticos protegiendo los frames donde los rostros son más nítidos, manteniendo la coherencia de identidad (Face Cuts).
 * **Extracción de Audio Nativa:** Extrae la pista original directamente desde el nodo inicial y la inyecta de vuelta en el ensamblaje final.
-* **Soporte Arquitecturas DiT (WanVideo & LTX 2.3):** Calculadores matemáticos específicos aseguran que los lotes de vídeo cumplan con las estrictas reglas de descompresión (múltiplos de 4 para WanVideo, o regla `8n + 1` para LTX).
+* **Soporte Arquitecturas DiT (WanVideo & LTX 2.3):** Calculadores matemáticos específicos aseguran que los lotes de vídeo cumplan con las estrictas reglas de descompresión (regla de `4n + 1` para WanVideo, o regla `8n + 1` para LTX).
 * **Resoluciones Protegidas (Megapixel Shield):** Herramientas matemáticas (`ResTool`) que escalan las dimensiones automáticamente protegiendo el *training floor* de cada modelo base.
 
 ---

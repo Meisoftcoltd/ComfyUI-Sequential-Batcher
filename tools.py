@@ -170,7 +170,7 @@ class VAESafeFramePadder:
         return {
             "required": {
                 "images": ("IMAGE",),
-                "rule": (["WanVideo (Múltiplo de 4)", "LTX (Regla 8n+1)"],),
+                "rule": (["WanVideo (Regla 4n+1)", "LTX (Regla 8n+1)"],),
             }
         }
 
@@ -183,9 +183,13 @@ class VAESafeFramePadder:
         n_frames = images.shape[0]
         target_frames = n_frames
 
-        if rule == "WanVideo (Múltiplo de 4)":
-            target_frames = ((n_frames + 3) // 4) * 4
-        elif rule == "LTX (Regla 8n+1)":
+        if "WanVideo" in rule:
+            # 🚀 FIX: Regla 4n+1 para WanVideo (Evita la pérdida de 3 frames en el VAE)
+            if n_frames < 5:
+                target_frames = 5
+            else:
+                target_frames = ((n_frames + 2) // 4) * 4 + 1
+        elif "LTX" in rule:
             if n_frames < 9:
                 target_frames = 9
             else:
