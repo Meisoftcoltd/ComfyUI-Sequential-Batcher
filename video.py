@@ -436,9 +436,13 @@ class AutoLoopCalculatorWan:
         from . import loop
 
         # --- MEISOFT PATCH: Sincronización Matemática (Hold Last Frame) ---
-        # 1. Redondear hacia ARRIBA a múltiplo de 4 (Acolchado)
+        # 1. Redondear hacia ARRIBA a la regla 4n+1 (Acolchado WanVideo)
         potential_effective_frames = source_frame_count // select_every_nth
-        safe_effective_frames = ((potential_effective_frames + 3) // 4) * 4
+
+        if potential_effective_frames < 5:
+            safe_effective_frames = 5
+        else:
+            safe_effective_frames = ((potential_effective_frames + 2) // 4) * 4 + 1
 
         # 🚀 FIX: Conservamos el límite FÍSICO real del vídeo para el timeline global
         physical_source_frame_count = potential_effective_frames * select_every_nth
@@ -451,7 +455,7 @@ class AutoLoopCalculatorWan:
         estimated_loops = math.ceil(safe_effective_frames / target_frames_per_loop)
         if estimated_loops > 0:
             optimal_target = math.ceil(safe_effective_frames / estimated_loops)
-            adjusted_target = ((optimal_target + 3) // 4) * 4
+            adjusted_target = ((optimal_target + 2) // 4) * 4 + 1
             print(f"   -> ⚖️ Ajuste Proporcional: Target recalculado de {target_frames_per_loop} a {adjusted_target} frames por ciclo (para {estimated_loops} ciclos)")
             target_frames_per_loop = adjusted_target
 
@@ -459,7 +463,7 @@ class AutoLoopCalculatorWan:
         if effective_padding > 0:
             print(f"   -> 🛡️ Ajuste VAE: Se pedirán {safe_effective_frames} frames (Acolchado técnico: Se rellenarán {effective_padding} frames)")
         else:
-            print(f"   -> ✅ Ajuste VAE: Perfecto. Múltiplo de 4 detectado.")
+            print(f"   -> ✅ Ajuste VAE: Perfecto. Regla 4n+1 detectada.")
 
         print(f"   -> 📊 Timeline final: 0 a {physical_source_frame_count} (Límite Físico Real)")
 
@@ -494,15 +498,17 @@ class AutoLoopCalculatorWan:
             else:
                 print(f"   -> ⚖️ Sin caras. Forzando corte equitativo x4: {ideal_cut}")
 
+        # 4. Cálculo final del chunk consolidado a regla 4n+1
         effective_chunk_frames = math.ceil((best_cut - current_pos) / select_every_nth)
-        effective_chunk_frames = ((effective_chunk_frames + 3) // 4) * 4
 
-        if effective_chunk_frames < 4:
-            effective_chunk_frames = 4
+        effective_chunk_frames = ((effective_chunk_frames + 2) // 4) * 4 + 1
+
+        if effective_chunk_frames < 5:
+            effective_chunk_frames = 5
 
         # Comprobación contra el límite físico para evitar pedir más allá del final
         if current_pos + (effective_chunk_frames * select_every_nth) >= physical_source_frame_count:
-            print(f"   -> 🏁 Chunk final detectado. Ajustando a {effective_chunk_frames} frames para mantener múltiplo de 4.")
+            print(f"   -> 🏁 Chunk final detectado. Ajustando a {effective_chunk_frames} frames para mantener regla 4n+1.")
             loop.global_is_final_chunk = True
         else:
             loop.global_is_final_chunk = False
