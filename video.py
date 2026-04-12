@@ -337,41 +337,81 @@ class IncrementalVideoStitcher:
     FUNCTION = "stitch"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
+    # 🚀 EVITA QUE COMFYUI IGNORE EL NODO USANDO CACHÉ
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        import time
+        return time.time()
+
     def stitch(self, images, audio, current_loop_index):
         from . import loop
-        import os, folder_paths, torch
+        import os, folder_paths, torch, shutil, time
 
-        cache_dir = os.path.join(folder_paths.get_temp_directory(), "wan_stitcher_cache")
-        os.makedirs(cache_dir, exist_ok=True)
+        # 1. Definir la subcarpeta temporal dedicada
+        cache_dir = os.path.join(folder_paths.get_temp_directory(), "meisoft_video_cache")
 
-        path = os.path.join(cache_dir, f"batch_{current_loop_index:04d}.pt")
+        # 2. Si es el primer ciclo, purgar la carpeta de renders anteriores
+        if current_loop_index == 0:
+            if os.path.exists(cache_dir):
+                try:
+                    shutil.rmtree(cache_dir)
+                except Exception as e:
+                    print(f"   -> ⚠️ No se pudo limpiar la caché antigua: {e}")
+            os.makedirs(cache_dir, exist_ok=True)
+            print(f"\n🧹 [Stitcher] Ciclo 0 detectado. Subcarpeta temporal limpiada y lista.")
+        else:
+            os.makedirs(cache_dir, exist_ok=True)
+
+        # 3. Guardar las imágenes en la subcarpeta con un nombre a prueba de errores
+        # Usamos un timestamp para que se ordenen cronológicamente aunque el índice falle
+        timestamp = int(time.time() * 1000)
+        filename = f"batch_{current_loop_index:04d}_{timestamp}.pt"
+        path = os.path.join(cache_dir, filename)
+
+        # Guardamos el tensor en la CPU para no saturar la VRAM
         torch.save(images.cpu(), path)
-        print(f"🎞️ [Stitcher] Lote {current_loop_index} guardado en disco ({images.shape[0]} frames).")
+        print(f"📦 [Stitcher] Guardando lote temporal en: {filename} ({images.shape[0]} frames).")
 
+        # 4. Comprobar si hemos llegado al final
         source_total = getattr(loop, 'global_source_frame_count', 1)
-        is_final_cycle = loop.global_accumulated_frames >= source_total
+        is_final_cycle = getattr(loop, 'global_accumulated_frames', 0) >= source_total
 
         if is_final_cycle:
-            print(f"   -> 🏁 Generación completa. Liberando tensor total al flujo para procesos finales.")
-            print(f"📦 [Stitcher] Ensamblando todos los lotes de vídeo...")
+            print(f"   -> 🏁 ¡Último ciclo detectado! Extrayendo todos los frames de la subcarpeta...")
             all_tensors = []
-            for i in range(current_loop_index + 1):
-                p = os.path.join(cache_dir, f"batch_{i:04d}.pt")
-                if os.path.exists(p):
-                    all_tensors.append(torch.load(p))
-                    try: os.remove(p)
-                    except: pass
 
+            # Listar y ordenar todos los archivos .pt de la subcarpeta cronológicamente
+            batch_files = sorted([f for f in os.listdir(cache_dir) if f.endswith('.pt')])
+
+            if not batch_files:
+                print("   -> ❌ ERROR: No se encontraron frames en la subcarpeta.")
+                return (images, audio, True)
+
+            for f in batch_files:
+                p = os.path.join(cache_dir, f)
+                try:
+                    tensor_batch = torch.load(p)
+                    all_tensors.append(tensor_batch)
+                    print(f"      -> 🧩 Añadiendo: {f} ({tensor_batch.shape[0]} frames)")
+                except Exception as e:
+                    print(f"      -> ❌ Error leyendo {f}: {e}")
+
+            # Ensamblar el vídeo completo
             final_tensor = torch.cat(all_tensors, dim=0)
-            print(f"✅ [Stitcher] Vídeo completado: {final_tensor.shape[0]} frames ensamblados.")
+            print(f"✅ [Stitcher] VÍDEO COMPLETADO: {final_tensor.shape[0]} frames ensamblados con éxito.")
 
-            # 🚀 Retornamos True al final
+            # Destruir la subcarpeta temporal para no dejar basura
+            try:
+                shutil.rmtree(cache_dir)
+                print(f"🧹 [Stitcher] Subcarpeta temporal destruida.")
+            except:
+                pass
+
+            # Retornar el vídeo completo
             return (final_tensor, audio, True)
         else:
-            print(f"   -> ⏳ Ciclo intermedio. Soltando 1 frame dummy...")
+            print(f"   -> ⏳ Ciclo intermedio. Almacenado de forma segura. Pasando 1 frame dummy al pipeline...")
             dummy_frame = images[-1:].clone()
-
-            # 🚀 Retornamos False al final
             return (dummy_frame, None, False)
 
 @register_node
