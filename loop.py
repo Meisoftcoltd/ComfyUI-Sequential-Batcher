@@ -99,15 +99,15 @@ class AutoLoopCalculatorLTX:
 
         potential_effective_frames = source_frame_count // select_every_nth
 
-        # Truncar al (8n + 1) más cercano hacia abajo
+        # Truncar al (8n + 1) más cercano hacia ARRIBA (Acolchado)
         if potential_effective_frames < 9:
             safe_effective_frames = 9 # Too short, bypass
         else:
-            safe_effective_frames = ((potential_effective_frames - 1) // 8) * 8 + 1
+            safe_effective_frames = ((potential_effective_frames + 6) // 8) * 8 + 1
 
         safe_source_frame_count = safe_effective_frames * select_every_nth
         loop.global_source_frame_count = safe_source_frame_count
-        effective_loss = potential_effective_frames - safe_effective_frames
+        effective_padding = safe_effective_frames - potential_effective_frames
 
         # Ajuste proporcional forzando regla 8n + 1
         estimated_loops = math.ceil(safe_effective_frames / target_frames_per_loop)
@@ -119,9 +119,9 @@ class AutoLoopCalculatorLTX:
             print(f"   -> ⚖️ Ajuste Proporcional LTX: Target recalculado a {adjusted_target} frames por ciclo.")
 
         # --- LOGS MEJORADOS Y TRANSPARENTES ---
-        print(f"   -> 🎞️ Capacidad del video: {potential_effective_frames} frames procesables (Nth: {select_every_nth})")
-        if effective_loss > 0:
-            print(f"   -> 🛡️ Ajuste VAE: Se usarán {safe_effective_frames} frames (Descarte técnico: {effective_loss} frame/s de proceso)")
+        print(f"   -> 🎞️ Capacidad del video original: {potential_effective_frames} frames (Nth: {select_every_nth})")
+        if effective_padding > 0:
+            print(f"   -> 🛡️ Ajuste VAE: Se pedirán {safe_effective_frames} frames (Acolchado técnico: Se rellenarán {effective_padding} frames)")
         else:
             print(f"   -> ✅ Ajuste VAE: Perfecto. Regla 8n+1 detectada.")
 

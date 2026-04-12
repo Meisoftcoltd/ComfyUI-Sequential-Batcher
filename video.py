@@ -399,14 +399,14 @@ class AutoLoopCalculatorWan:
         import math
         from . import loop
 
-        # --- MEISOFT PATCH: Sincronización Matemática y Ajuste Proporcional ---
-        # 1. Truncado a múltiplo de 4 (Desechamos los 2-3 frames residuales)
+        # --- MEISOFT PATCH: Sincronización Matemática (Hold Last Frame) ---
+        # 1. Redondear hacia ARRIBA a múltiplo de 4 (Acolchado)
         potential_effective_frames = source_frame_count // select_every_nth
-        safe_effective_frames = (potential_effective_frames // 4) * 4
+        safe_effective_frames = ((potential_effective_frames + 3) // 4) * 4
 
         safe_source_frame_count = safe_effective_frames * select_every_nth
         loop.global_source_frame_count = safe_source_frame_count
-        effective_loss = potential_effective_frames - safe_effective_frames
+        effective_padding = safe_effective_frames - potential_effective_frames
 
         loop.global_select_every_nth = select_every_nth
 
@@ -422,9 +422,9 @@ class AutoLoopCalculatorWan:
             target_frames_per_loop = adjusted_target
 
         # --- LOGS MEJORADOS Y TRANSPARENTES ---
-        print(f"   -> 🎞️ Capacidad del video: {potential_effective_frames} frames procesables (Nth: {select_every_nth})")
-        if effective_loss > 0:
-            print(f"   -> 🛡️ Ajuste VAE: Se usarán {safe_effective_frames} frames (Descarte técnico: {effective_loss} frame/s de proceso)")
+        print(f"   -> 🎞️ Capacidad del video original: {potential_effective_frames} frames (Nth: {select_every_nth})")
+        if effective_padding > 0:
+            print(f"   -> 🛡️ Ajuste VAE: Se pedirán {safe_effective_frames} frames (Acolchado técnico: Se rellenarán {effective_padding} frames)")
         else:
             print(f"   -> ✅ Ajuste VAE: Perfecto. Múltiplo de 4 detectado.")
 
