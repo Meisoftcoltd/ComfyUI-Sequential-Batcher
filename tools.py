@@ -162,3 +162,50 @@ class ConditionalAudioRouter:
             dummy_audio = {"waveform": dummy_waveform, "sample_rate": sample_rate}
 
             return (dummy_audio,)
+
+@register_node
+class VAESafeFramePadder:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "images": ("IMAGE",),
+                "rule": (["WanVideo (Múltiplo de 4)", "LTX (Regla 8n+1)"],),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "INT")
+    RETURN_NAMES = ("PADDED_IMAGES", "frames_added")
+    FUNCTION = "pad"
+    CATEGORY = "🔁 Sequential Batcher/Tools"
+
+    def pad(self, images, rule):
+        n_frames = images.shape[0]
+        target_frames = n_frames
+
+        if rule == "WanVideo (Múltiplo de 4)":
+            target_frames = ((n_frames + 3) // 4) * 4
+        elif rule == "LTX (Regla 8n+1)":
+            if n_frames < 9:
+                target_frames = 9
+            else:
+                target_frames = ((n_frames + 6) // 8) * 8 + 1
+
+        diff = target_frames - n_frames
+
+        print(f"\n{'='*50}")
+        print(f"🛡️ [DEBUG] NODO: VAE Safe Frame Padder")
+        print(f"   -> Frames recibidos: {n_frames}")
+        print(f"   -> Regla aplicada: {rule}")
+
+        if diff > 0:
+            print(f"   -> 🧱 Tensor incompleto. Clonando el último frame {diff} vez/veces...")
+            last_frame = images[-1:] # Extraemos el último frame
+            padding = last_frame.repeat(diff, 1, 1, 1) # Lo multiplicamos
+            images = torch.cat([images, padding], dim=0) # Lo fusionamos al final
+            print(f"   -> ✅ Tensor final acolchado a: {target_frames} frames.")
+        else:
+            print(f"   -> ✅ Tensor perfecto. No requiere acolchado.")
+
+        print(f"{'='*50}\n")
+        return (images, diff)

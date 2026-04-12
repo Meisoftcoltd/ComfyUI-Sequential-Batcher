@@ -36,6 +36,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "SequentialLoopTrigger": "🚀 Loop Trigger (Auto-Queue)",
     # Tools
     "AutoFPSLimiter": "⏱️ Auto FPS Limiter",
+    "VAESafeFramePadder": "🛡️ VAE Safe Frame Padder",
     "ResTool8x": "📐 ResTool 8x (SD1.5)",
     "ResTool16x": "📏 ResTool 16x (SDXL)",
     "ResTool32x": "🎞️ ResTool 32x (WanVideo)",
