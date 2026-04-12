@@ -35,6 +35,11 @@ Para que el nodo `VideoAnalyzerWithAudio` pueda desempaquetar contenedores `.mp4
 * **🪟 Windows:**
   Descarga los binarios precompilados de FFmpeg y añade la carpeta `bin` a tus variables de entorno (PATH).
 
+### 🚨 Advertencia Crítica sobre el Uso de la VRAM
+Se **desrecomienda encarecidamente** el uso del argumento `--highvram` al arrancar ComfyUI.
+
+El argumento `--highvram` le da la orden estricta a ComfyUI de mantener los modelos bloqueados en la memoria de video. Esto sabotea directamente el funcionamiento de nuestro `VRAM Defragmenter`, ya que bloquea el comando `mm.unload_all_models()` impidiendo que la gráfica se vacíe entre ciclos. Para que esta suite funcione correctamente con modelos masivos como WanVideo y evite errores de OOM (Out Of Memory), los usuarios deben usar el arranque estándar (o `--normalvram`), permitiendo que el sistema libere dinámicamente la memoria hasta llegar a 0 GB entre lotes.
+
 ---
 
 ## 🧠 La Arquitectura Híbrida (Desglose de Nodos)

@@ -35,6 +35,11 @@ For the `VideoAnalyzerWithAudio` node to unpack `.mp4` containers and extract au
 * **🪟 Windows:**
   Download the precompiled FFmpeg binaries and add the `bin` folder to your environment variables (PATH).
 
+### 🚨 Critical Warning Regarding VRAM Usage
+The use of the `--highvram` argument when starting ComfyUI is **strongly discouraged**.
+
+The `--highvram` argument gives ComfyUI the strict command to keep models locked in video memory. This directly sabotages the operation of our `VRAM Defragmenter`, as it blocks the `mm.unload_all_models()` command, preventing the graphics card from emptying between cycles. For this suite to work correctly with massive models like WanVideo and avoid OOM (Out Of Memory) errors, users must use the standard startup (or `--normalvram`), allowing the system to dynamically release memory down to 0 GB between batches.
+
 ---
 
 ## 🧠 The Hybrid Architecture (Node Breakdown)
