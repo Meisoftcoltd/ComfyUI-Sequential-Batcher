@@ -99,38 +99,33 @@ class AutoLoopCalculatorLTX:
 
         potential_effective_frames = source_frame_count // select_every_nth
 
-        # Truncar al (8n + 1) más cercano hacia ARRIBA (Acolchado)
         if potential_effective_frames < 9:
-            safe_effective_frames = 9 # Too short, bypass
+            safe_effective_frames = 9
         else:
             safe_effective_frames = ((potential_effective_frames + 6) // 8) * 8 + 1
 
-        safe_source_frame_count = safe_effective_frames * select_every_nth
-        loop.global_source_frame_count = safe_source_frame_count
+        # 🚀 FIX: Conservamos el límite FÍSICO real del vídeo para el timeline global
+        physical_source_frame_count = potential_effective_frames * select_every_nth
+        loop.global_source_frame_count = physical_source_frame_count
         effective_padding = safe_effective_frames - potential_effective_frames
 
-        # Ajuste proporcional forzando regla 8n + 1
+        # Ajuste proporcional
         estimated_loops = math.ceil(safe_effective_frames / target_frames_per_loop)
         if estimated_loops > 0:
             optimal_target = math.ceil(safe_effective_frames / estimated_loops)
-            # Encontrar el 8n + 1 más cercano hacia arriba para cubrir el total
             adjusted_target = ((optimal_target - 1 + 7) // 8) * 8 + 1
             target_frames_per_loop = adjusted_target
             print(f"   -> ⚖️ Ajuste Proporcional LTX: Target recalculado a {adjusted_target} frames por ciclo.")
 
-        # --- LOGS MEJORADOS Y TRANSPARENTES ---
         print(f"   -> 🎞️ Capacidad del video original: {potential_effective_frames} frames (Nth: {select_every_nth})")
         if effective_padding > 0:
             print(f"   -> 🛡️ Ajuste VAE: Se pedirán {safe_effective_frames} frames (Acolchado técnico: Se rellenarán {effective_padding} frames)")
         else:
             print(f"   -> ✅ Ajuste VAE: Perfecto. Regla 8n+1 detectada.")
 
-        print(f"   -> 📊 Timeline final: 0 a {safe_source_frame_count} (de {source_frame_count} totales)")
-        # -------------------------------------------------------------
+        print(f"   -> 📊 Timeline final: 0 a {physical_source_frame_count} (Límite Físico Real)")
 
         loop.global_select_every_nth = select_every_nth
-
-        # Indicador global para el Stitcher y Sender (LTX mode activo)
         global global_ltx_mode
         global_ltx_mode = True
 
@@ -138,19 +133,18 @@ class AutoLoopCalculatorLTX:
 
         print(f"\n{'='*50}")
         print(f"📊 [DEBUG] NODO: Auto Loop Calculator (LTX 2.3)")
-        print(f"   -> Timeline seguro ajustado a LTX: {current_pos} / {safe_source_frame_count} (Original: {source_frame_count})")
+        print(f"   -> Timeline físico ajustado a LTX: {current_pos} / {physical_source_frame_count} (Original: {source_frame_count})")
 
-        if current_pos >= safe_source_frame_count:
+        if current_pos >= physical_source_frame_count:
             return (1, current_pos, select_every_nth)
 
-        frames_left = safe_source_frame_count - current_pos
+        frames_left = physical_source_frame_count - current_pos
 
         equitable_target = target_frames_per_loop * select_every_nth
-
         ideal_cut = current_pos + equitable_target
 
         if frames_left <= equitable_target:
-            best_cut = safe_source_frame_count
+            best_cut = physical_source_frame_count
             print(f"   -> 🧮 Absorbiendo resto final: meta fijada en frame {best_cut}")
         else:
             best_cut = ideal_cut
@@ -159,18 +153,15 @@ class AutoLoopCalculatorLTX:
                 best_cut = closest_face
                 print(f"   -> ✂️ Corte Inteligente proyectado: {best_cut} (Meta equitativa: {ideal_cut})")
             else:
-                print(f"   -> ⚖️ Sin caras detectadas. Forzando corte equitativo: {ideal_cut}")
+                print(f"   -> ⚖️ Sin caras. Forzando corte equitativo: {ideal_cut}")
 
         effective_chunk_frames = math.ceil((best_cut - current_pos) / select_every_nth)
-
-        # Redondear siempre hacia ARRIBA al (8n + 1) más cercano
         effective_chunk_frames = ((effective_chunk_frames + 6) // 8) * 8 + 1
 
         if effective_chunk_frames < 9:
-            effective_chunk_frames = 9 # Mínimo vital LTX
+            effective_chunk_frames = 9
 
-        # ELIMINAMOS el recorte final que rompe la regla 8n + 1
-        if current_pos + (effective_chunk_frames * select_every_nth) >= safe_source_frame_count:
+        if current_pos + (effective_chunk_frames * select_every_nth) >= physical_source_frame_count:
             print(f"   -> 🏁 Chunk final LTX detectado. Ajustando a {effective_chunk_frames} frames para mantener regla 8n+1.")
 
         skip_frames = current_pos

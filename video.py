@@ -404,8 +404,9 @@ class AutoLoopCalculatorWan:
         potential_effective_frames = source_frame_count // select_every_nth
         safe_effective_frames = ((potential_effective_frames + 3) // 4) * 4
 
-        safe_source_frame_count = safe_effective_frames * select_every_nth
-        loop.global_source_frame_count = safe_source_frame_count
+        # 🚀 FIX: Conservamos el límite FÍSICO real del vídeo para el timeline global
+        physical_source_frame_count = potential_effective_frames * select_every_nth
+        loop.global_source_frame_count = physical_source_frame_count
         effective_padding = safe_effective_frames - potential_effective_frames
 
         loop.global_select_every_nth = select_every_nth
@@ -413,50 +414,42 @@ class AutoLoopCalculatorWan:
         # 2. Ajuste Proporcional Real (Evitar micro-ciclos al final)
         estimated_loops = math.ceil(safe_effective_frames / target_frames_per_loop)
         if estimated_loops > 0:
-            # Repartir los frames equitativamente
             optimal_target = math.ceil(safe_effective_frames / estimated_loops)
-            # Asegurar que el nuevo target sea múltiplo de 4 (redondeando hacia arriba por seguridad)
             adjusted_target = ((optimal_target + 3) // 4) * 4
-
             print(f"   -> ⚖️ Ajuste Proporcional: Target recalculado de {target_frames_per_loop} a {adjusted_target} frames por ciclo (para {estimated_loops} ciclos)")
             target_frames_per_loop = adjusted_target
 
-        # --- LOGS MEJORADOS Y TRANSPARENTES ---
         print(f"   -> 🎞️ Capacidad del video original: {potential_effective_frames} frames (Nth: {select_every_nth})")
         if effective_padding > 0:
             print(f"   -> 🛡️ Ajuste VAE: Se pedirán {safe_effective_frames} frames (Acolchado técnico: Se rellenarán {effective_padding} frames)")
         else:
             print(f"   -> ✅ Ajuste VAE: Perfecto. Múltiplo de 4 detectado.")
 
-        print(f"   -> 📊 Timeline final: 0 a {safe_source_frame_count} (de {source_frame_count} totales)")
-        # -------------------------------------------------------------
+        print(f"   -> 📊 Timeline final: 0 a {physical_source_frame_count} (Límite Físico Real)")
 
         current_pos = getattr(loop, 'global_accumulated_frames', 0)
 
         print(f"\n{'='*50}")
         print(f"📊 [DEBUG] NODO: Auto Loop Calculator (WanVideo 3D VAE)")
-        print(f"   -> Timeline seguro ajustado a múltiplos de 4: {current_pos} / {safe_source_frame_count} (Original: {source_frame_count})")
+        print(f"   -> Timeline físico ajustado: {current_pos} / {physical_source_frame_count} (Original: {source_frame_count})")
 
-        # Prevención de desbordamiento de bucle
-        if current_pos >= safe_source_frame_count:
+        # Prevención de desbordamiento de bucle (Usando límite físico)
+        if current_pos >= physical_source_frame_count:
             return (4, current_pos, select_every_nth)
 
-        frames_left = safe_source_frame_count - current_pos
+        frames_left = physical_source_frame_count - current_pos
 
         equitable_target = target_frames_per_loop * select_every_nth
-
         ideal_cut = current_pos + equitable_target
 
         if frames_left <= equitable_target:
-            best_cut = safe_source_frame_count
+            best_cut = physical_source_frame_count
             print(f"   -> 🧮 Absorbiendo resto final seguro: meta fijada en frame {best_cut}")
         else:
             best_cut = ideal_cut
             if safe_faces_list and len(safe_faces_list) > 0:
                 closest_face = min(safe_faces_list, key=lambda x: abs(x - ideal_cut))
-                # Distancia al corte de cara
                 chunk_from_face = math.ceil((closest_face - current_pos) / select_every_nth)
-                # Blindaje matemático x4 para el corte de cara
                 safe_chunk_from_face = (chunk_from_face // 4) * 4
                 if safe_chunk_from_face < 4: safe_chunk_from_face = 4
 
@@ -465,19 +458,14 @@ class AutoLoopCalculatorWan:
             else:
                 print(f"   -> ⚖️ Sin caras. Forzando corte equitativo x4: {ideal_cut}")
 
-        # 4. Cálculo final del chunk consolidado
         effective_chunk_frames = math.ceil((best_cut - current_pos) / select_every_nth)
-
-        # Redondear siempre hacia ARRIBA al múltiplo de 4 más cercano para evitar chunks inválidos
         effective_chunk_frames = ((effective_chunk_frames + 3) // 4) * 4
 
         if effective_chunk_frames < 4:
             effective_chunk_frames = 4
 
-        # ELIMINAMOS el recorte final que rompe el múltiplo de 4.
-        # Si pedimos más frames de los que quedan, VHS duplicará el último frame automáticamente,
-        # salvando así el renderizado sin crashear el 3D VAE.
-        if current_pos + (effective_chunk_frames * select_every_nth) >= safe_source_frame_count:
+        # Comprobación contra el límite físico para evitar pedir más allá del final
+        if current_pos + (effective_chunk_frames * select_every_nth) >= physical_source_frame_count:
             print(f"   -> 🏁 Chunk final detectado. Ajustando a {effective_chunk_frames} frames para mantener múltiplo de 4.")
 
         skip_frames = current_pos
