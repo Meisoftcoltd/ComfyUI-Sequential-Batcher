@@ -1,78 +1,78 @@
 # ♾️ ComfyUI Sequential Batcher
-**v1.5.2** | **VRAM-Optimized Generation** | **Recursive Self-Queuing**
+**v1.6.0** | **VRAM-Optimized Generation** | **Recursive Self-Queuing** | **Perfect Audio Sync**
 
-A professional-grade suite of custom nodes for ComfyUI. Designed to bypass VRAM limitations in heavy video generation (WanVideo, Hunyuan, etc.) through **Recursive Self-Queuing** and autonomous, batch-by-batch processing.
+A professional-grade suite of custom nodes for ComfyUI. Designed to bypass extreme VRAM limits in heavy video generation (WanVideo, Hunyuan, LTX) through **Recursive Auto-Queuing**, autonomous batch-by-batch processing, and forensic memory management.
 
-> 🌍 **Leer en Español:** [README.md](README.md)
+> 🇪🇸 **Leer en Español:** [README.md](README.md)
+
+---
+
+## 🌟 What's New in v1.6.0 (Perfect Sync Update)
+* **🛡️ VAE Safe Frame Padder (Hold Last Frame):** The engine now dynamically expands incomplete tensors at the end of the video. If frames are missing to meet the strict requirements of WanVideo (multiples of 4) or LTX (8n+1), it clones the last frame imperceptibly. **Result: Zero VAE crashes and 100% audio sync with no micro-stutters.**
+* **📈 Mathematical Inversion to "Expansion":** The `AutoLoopCalculatorWan` and `AutoLoopCalculatorLTX` calculators now safely round the timeline upwards, guaranteeing total fluidity in intermediate cycles.
 
 ---
 
 ## ✨ Key Features
 
-* **Autonomous Orchestration:** Turn your ComfyUI into a continuous rendering engine. Press "Queue" once and the workflow will feed itself until the entire video is finished.
-* **Smart Chunking:** Analyzes the base video and performs mathematical cuts avoiding the separation of frames where faces are sharpest, thus maintaining identity coherence.
-* **Native Audio Extraction:** Extracts the original audio track straight from the entry node and seamlessly injects it back into the final stitch.
-* **Dual Input Engine:** The explorer node accepts both manually uploaded videos and dynamically injected string paths from downloaders (e.g., YTDLP), behaving exactly like VideoHelperSuite.
-* **Native LTX 2.3 Support:** Specific mathematical calculators (`AutoLoopCalculatorLTX` and `ResTool64xLTX`) have been added to ensure video batches comply with the strict DiT architecture decompression rules and latent downscale factors (resolutions strictly divisible by 64 and frame partitions of `8n + 1`).
+* **Autonomous Orchestration:** Turn your ComfyUI into a continuous rendering engine. Press "Queue Prompt" just once and the flow will feed itself by modifying seeds and indices until the entire video is finished.
+* **Smart Chunking:** Analyzes the base video and makes mathematical cuts protecting the frames where faces are sharpest, maintaining identity coherence (Face Cuts).
+* **Native Audio Extraction:** Extracts the original track directly from the initial node and injects it back into the final assembly.
+* **DiT Architectures Support (WanVideo & LTX 2.3):** Specific mathematical calculators ensure video batches comply with strict decompression rules (multiples of 4 for WanVideo, or the `8n + 1` rule for LTX).
+* **Protected Resolutions (Megapixel Shield):** Mathematical tools (`ResTool`) that automatically scale dimensions protecting the *training floor* of each base model.
 
 ---
 
 ## ⚠️ System Requirements (Critical)
 
-For the `VideoAnalyzerWithAudio` node to unpack `.mp4` containers and extract audio via `torchaudio`, **FFmpeg is absolutely mandatory**.
+For the `VideoAnalyzerWithAudio` node to unpack `.mp4` containers and extract audio with `torchaudio`, **FFmpeg is absolutely mandatory**.
 
 * **🐧 Ubuntu / Linux / WSL2:**
-  The ComfyUI Manager script will attempt to install it for you. If it fails, run:
+  The script will attempt to install it for you. If it fails, run manually:
   ```bash
   sudo apt update && sudo apt install ffmpeg -y
   ```
 * **🪟 Windows:**
-  Download the pre-compiled binaries from FFmpeg and add the bin folder to your environment variables (PATH).
+  Download the precompiled FFmpeg binaries and add the `bin` folder to your environment variables (PATH).
 
-## 🧠 The Hybrid Architecture (How it works)
-Video processing is divided into highly specialized roles:
+---
 
-* **🕵️ Video Analyzer Face detector + Audio (The Explorer):** Scans the video via OpenCV or through an optional GPU-accelerated YOLO/ONNX model for precise face detection, extracts the audio and outputs a visual Reference Frame. Acts as the main gateway.
-* **📊 Auto Loop Calculator (The Brain):** Receives biometrics from the Explorer and calculates asymmetric cut coordinates (chunk_frames, skip_frames) featuring a ±10% dynamic margin to avoid residual micro-batches.
-* **📊 Auto Loop Calculator (WanVideo 3dVAE):** An alternative for WanVideo that ensures frame chunks are strictly multiples of 4, protecting the 3D VAE from crashing.
-* **🛠️ The Worker (VHS_LoadVideo):** Freed from analytical tasks, this standard ComfyUI node simply extracts the exact tensors the Brain commands.
-* **🎞️ Incremental Auto-Stitcher (The Assembler):** Collects the rendered batches and the pristine original audio track, progressively stitching the final video.
-* **📥 Session Image Receiver** and **📤 Session Image Sender:** Hold and pass the last valid keyframe (reference frame) across iterations to maintain temporal identity coherence.
-* **⏱️ Auto FPS Limiter (The Synchronizer):** Prevents VRAM OOM errors on high framerate videos (e.g., 60 FPS) by automatically calculating the required frame skip (`select_every_nth`) and adjusting the final FPS to ensure audio and motion maintain perfect synchronization.
-* **🔀 Master Switch (Lazy Evaluation and Graph Surgery):** Advanced logic node utilizing *Native Lazy Evaluation* in Cycle 0 and *Hot Graph Surgery* in subsequent cycles. It physically amputates inactive route wires from the JSON payload sent to ComfyUI, ensuring heavy nodes (like Lip Syncs or Upscalers) are not even loaded into memory when unneeded, resulting in massive VRAM savings.
-* **Protected Resolutions (Megapixel Shield):** Mathematical resolution tools that scale dimensions to avoid artifacts by protecting the "training floor" of each model:
-  * **📐 ResTool 8x (SD1.5)**
-  * **📏 ResTool 16x (SDXL)**
-  * **🎞️ ResTool 32x (WanVideo)**
-  * **🎬 ResTool 64x (Hunyuan)**
+## 🧠 The Hybrid Architecture (Node Breakdown)
+Processing is divided into highly specialized roles:
 
-## 🔌 Wiring Guide (Workflow Setup)
-To build the perfect sequential workflow, follow these steps:
+* **🕵️ Video Analyzer Face detector + Audio:** Scans the video via OpenCV or using a GPU-accelerated YOLO model. Extracts faces, audio, and the Reference Frame.
+* **📊 Auto Loop Calculator (Base / WanVideo / LTX):** Receives the biometrics and calculates cut coordinates (chunk_frames, skip_frames).
+* **🛡️ VAE Safe Frame Padder:** Intercepts the final VHS tensor and pads it by cloning the last frame if material is missing, saving the VAE from a collapse.
+* **🎞️ Incremental Auto-Stitcher:** Collects rendered batches and the audio track, progressively stitching the final video in the temporary folder.
+* **📥 Receiver & 📤 Sender:** Retain and transfer the last valid keyframe across cycles to maintain temporal coherence.
+* **⏱️ Auto FPS Limiter:** Smartly reduces FPS guaranteeing audio and motion maintain perfect synchronization without breaking VRAM.
+* **🔀 Master Switch (Lazy Evaluation):** Physically amputates wires from inactive routes in the JSON sent to ComfyUI. Heavy nodes not needed in a specific cycle aren't even loaded into memory.
+* **🧹 VRAM Defragmenter:** Forensic memory purge (Sacred Sequence) that clears CUDA/MPS cache and forces the Garbage Collector between heavy cycles.
 
-1. **Initial Setup:** Place the 🕵️ Video Analyzer Face detector + Audio at the beginning. Upload a video or connect a STRING cable to it from your favorite downloader. Optionally, connect an 'ONNX Detection Model Loader' node to its `bbox_detector` input for GPU face scanning.
-2. **The Math:** Route total_frames and safe_faces_list from the Explorer into the 📊 Auto Loop Calculator (or 📊 Auto Loop Calculator (WanVideo 3dVAE) if using WanVideo).
-3. **Extraction:** Add a VHS_LoadVideo node. Right-click on it -> Convert Widget to Input -> video. Connect the video_name from the Explorer to this new input. Feed the cutting parameters from the Brain.
-4. **Audio Passthrough:** Route the source_audio cable from the Explorer all the way to the audio port of your 🎞️ Incremental Auto-Stitcher (at the end of your workflow).
-5. **The Trigger:** Connect your Stitcher's output to the 🚀 Loop Trigger (Auto-Queue) input.
-6. **Execution:** Wire the 🏁 Loop Start (Index) to the Brain and the Stitcher. Press "Queue Prompt" ONLY ONCE (do not check Auto Queue in the UI). Sit back and enjoy the autonomous magic!
+---
 
-## 🚀 GPU Acceleration for Face Scanning (NEW)
-The `VideoAnalyzerWithAudio` node now features an optional input port named `bbox_detector`. This allows you to offload facial scanning to your graphics card, massively multiplying the analysis speed.
+## 🔌 Quick Wiring Guide (Workflow Setup)
 
-**How to use it:**
-1. Install the popular **Impact Pack**.
-2. Add the `UltralyticsDetectorProvider` node to your canvas.
-3. Select a face model (e.g., `bbox/face_yolov8m.pt`).
-4. Connect the `BBOX_DETECTOR` output to the new input of our Explorer node.
-*Note: If you leave this port unconnected, the node will seamlessly fall back to standard CPU scanning (OpenCV).*
+1. **The Explorer:** Place the `Video Analyzer` at the beginning. Upload a video (or use a YTDLP path).
+2. **Math:** Connect `total_frames` and `safe_faces_list` to your chosen `Auto Loop Calculator`.
+3. **Safe Extraction:** Add the native `VHS_LoadVideo` node. Convert its input to *video_name* and connect it to the Analyzer. Connect its `IMAGE` output to the new `VAE Safe Frame Padder` node.
+4. **Audio Passthrough:** Route the `source_audio` wire from the Explorer directly to the `audio` port of your `Incremental Auto-Stitcher` (at the end of the flow).
+5. **The Trigger:** Connect the output of your Stitcher to the `Loop Trigger (Auto-Queue)` node.
+6. **Execution:** Connect the `Loop Start (Index)` to the Brain and the Stitcher.
+7. **Fire:** Click "Queue Prompt" **JUST ONCE**. Enjoy the autonomous magic!
 
-## 🧹 Auto VRAM Cleanup (NEW)
-The `SequentialLoopTrigger` node now acts as an intelligent cleanup manager. Once it detects that all frames have been processed and video generation has finished, it automatically:
-1. Forces ComfyUI to release all heavy models from memory (WanVideo, VAE, etc.).
-2. Triggers Python's garbage collector to eliminate residual memory in RAM.
-3. Deeply empties PyTorch caches, supporting multiple platforms (CUDA/ROCm for NVIDIA/AMD, and MPS for Apple Silicon).
+---
 
-This ensures your GPU returns to 0GB usage upon completion, preventing OOM errors in your subsequent generations!
+## 🚀 GPU Acceleration (Face Scanning)
+The `VideoAnalyzerWithAudio` has a `bbox_detector` port to delegate facial scanning to the graphics card:
+1. Install the *Impact Pack*.
+2. Add the `UltralyticsDetectorProvider` node and select a face model (e.g. `face_yolov8m.pt`).
+3. Connect its output to the Analyzer's port.
+*(The node features auto-unload: it will destroy this model from VRAM upon completion to make room for generation).*
 
-**Changelog v1.5.3:** Introduced an automatic deep VRAM cleanup system within the `SequentialLoopTrigger` node, ensuring complete release of GPU (and RAM) memory after generating heavy videos across CUDA, ROCm, and Mac MPS architectures.
-**Changelog v1.5.2:** Automated FFmpeg installation, critical enhancement on ComfyUI pre-flight check bypass for dynamic inputs in the Analyzer, and detailed exposure of torchaudio exceptions.
+---
+
+## 📝 Recent Changelog
+* **v1.6.0:** Implementation of `VAESafeFramePadder` (Hold Last Frame) and mathematical redesign to Expansion mode. Goodbye to audio cuts and crashes in the final cycle of WanVideo and LTX.
+* **v1.5.4:** Injection of the PyTorch environment variable `max_split_size_mb:128` to avoid VRAM micro-fragmentation with Triton kernels (SageAttention). Early YOLO model auto-unload.
+* **v1.5.3:** "Sacred Sequence" in the VRAM Defragmenter (Break cycles -> Soft Evacuation -> IPC Cleanup -> Thread Synchronization).
