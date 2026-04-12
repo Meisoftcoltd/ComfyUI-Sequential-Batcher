@@ -167,9 +167,15 @@ class SessionImageSender:
             # since it will be reused as the start of the next chunk.
             advanced_original_frames = max(1, (frames_accepted - 1) * stride)
 
-        loop.global_accumulated_frames += advanced_original_frames
-
         source_total = getattr(loop, 'global_source_frame_count', 1)
+        is_final_chunk = getattr(loop, 'global_is_final_chunk', False)
+
+        # 🚀 FIX: Compensar los frames destruidos por el VAE en el ciclo final
+        if is_final_chunk:
+            print(f"   -> 🏁 LOTE FINAL ABSOLUTO DETECTADO. Compensando mermas del VAE (Timeline forzado al 100%).")
+            loop.global_accumulated_frames = source_total
+        else:
+            loop.global_accumulated_frames += advanced_original_frames
 
         # 🚀 NUEVO: Detectar si es el ciclo final o un ciclo único
         is_final_cycle = loop.global_accumulated_frames >= source_total

@@ -346,71 +346,67 @@ class IncrementalVideoStitcher:
     def stitch(self, images, audio, current_loop_index):
         from . import loop
         import os, folder_paths, torch, shutil, time
+        from PIL import Image
+        import numpy as np
 
-        # 1. Definir la subcarpeta temporal dedicada
         cache_dir = os.path.join(folder_paths.get_temp_directory(), "meisoft_video_cache")
 
-        # 2. Si es el primer ciclo, purgar la carpeta de renders anteriores
         if current_loop_index == 0:
             if os.path.exists(cache_dir):
-                try:
-                    shutil.rmtree(cache_dir)
-                except Exception as e:
-                    print(f"   -> ⚠️ No se pudo limpiar la caché antigua: {e}")
+                try: shutil.rmtree(cache_dir)
+                except Exception as e: pass
             os.makedirs(cache_dir, exist_ok=True)
-            print(f"\n🧹 [Stitcher] Ciclo 0 detectado. Subcarpeta temporal limpiada y lista.")
+            print(f"\n🧹 [Stitcher] Ciclo 0 detectado. Subcarpeta temporal limpiada.")
         else:
             os.makedirs(cache_dir, exist_ok=True)
 
-        # 3. Guardar las imágenes en la subcarpeta con un nombre a prueba de errores
-        # Usamos un timestamp para que se ordenen cronológicamente aunque el índice falle
         timestamp = int(time.time() * 1000)
-        filename = f"batch_{current_loop_index:04d}_{timestamp}.pt"
-        path = os.path.join(cache_dir, filename)
 
-        # Guardamos el tensor en la CPU para no saturar la VRAM
-        torch.save(images.cpu(), path)
-        print(f"📦 [Stitcher] Guardando lote temporal en: {filename} ({images.shape[0]} frames).")
+        # 🚀 FIX OOM RAM: Guardar frames individualmente como PNG (Ultra Ligero)
+        print(f"📦 [Stitcher] Guardando {images.shape[0]} frames como PNGs de alta calidad...")
+        for i in range(images.shape[0]):
+            filename = f"frame_{current_loop_index:04d}_{timestamp}_{i:04d}.png"
+            path = os.path.join(cache_dir, filename)
+            img_array = 255. * images[i].cpu().numpy()
+            img = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
+            img.save(path, format="PNG")
 
-        # 4. Comprobar si hemos llegado al final
         source_total = getattr(loop, 'global_source_frame_count', 1)
-        is_final_cycle = getattr(loop, 'global_accumulated_frames', 0) >= source_total
+        is_final_chunk = getattr(loop, 'global_is_final_chunk', False)
 
-        if is_final_cycle:
-            print(f"   -> 🏁 ¡Último ciclo detectado! Extrayendo todos los frames de la subcarpeta...")
-            all_tensors = []
+        if is_final_chunk or loop.global_accumulated_frames >= source_total:
+            print(f"   -> 🏁 ¡Último ciclo detectado! Ensamblando PNGs desde la caché temporal...")
 
-            # Listar y ordenar todos los archivos .pt de la subcarpeta cronológicamente
-            batch_files = sorted([f for f in os.listdir(cache_dir) if f.endswith('.pt')])
+            png_files = sorted([f for f in os.listdir(cache_dir) if f.endswith('.png')])
 
-            if not batch_files:
+            if not png_files:
                 print("   -> ❌ ERROR: No se encontraron frames en la subcarpeta.")
                 return (images, audio, True)
 
-            for f in batch_files:
-                p = os.path.join(cache_dir, f)
-                try:
-                    tensor_batch = torch.load(p)
-                    all_tensors.append(tensor_batch)
-                    print(f"      -> 🧩 Añadiendo: {f} ({tensor_batch.shape[0]} frames)")
-                except Exception as e:
-                    print(f"      -> ❌ Error leyendo {f}: {e}")
+            # 🚀 OPTIMIZACIÓN EXTREMA DE RAM: Pre-asignamos el tensor en lugar de usar torch.cat
+            first_img = Image.open(os.path.join(cache_dir, png_files[0]))
+            H, W = first_img.height, first_img.width
+            total_frames = len(png_files)
 
-            # Ensamblar el vídeo completo
-            final_tensor = torch.cat(all_tensors, dim=0)
+            print(f"   -> 🧩 Reservando bloque continuo en RAM para {total_frames} frames...")
+            final_tensor = torch.empty((total_frames, H, W, 3), dtype=torch.float32, device="cpu")
+
+            for i, f in enumerate(png_files):
+                img = Image.open(os.path.join(cache_dir, f)).convert("RGB")
+                img_np = np.array(img).astype(np.float32) / 255.0
+                final_tensor[i] = torch.from_numpy(img_np)
+
             print(f"✅ [Stitcher] VÍDEO COMPLETADO: {final_tensor.shape[0]} frames ensamblados con éxito.")
 
-            # Destruir la subcarpeta temporal para no dejar basura
             try:
                 shutil.rmtree(cache_dir)
                 print(f"🧹 [Stitcher] Subcarpeta temporal destruida.")
             except:
                 pass
 
-            # Retornar el vídeo completo
             return (final_tensor, audio, True)
         else:
-            print(f"   -> ⏳ Ciclo intermedio. Almacenado de forma segura. Pasando 1 frame dummy al pipeline...")
+            print(f"   -> ⏳ Ciclo intermedio. Frames PNG almacenados de forma segura. Pasando 1 frame dummy...")
             dummy_frame = images[-1:].clone()
             return (dummy_frame, None, False)
 
@@ -507,6 +503,9 @@ class AutoLoopCalculatorWan:
         # Comprobación contra el límite físico para evitar pedir más allá del final
         if current_pos + (effective_chunk_frames * select_every_nth) >= physical_source_frame_count:
             print(f"   -> 🏁 Chunk final detectado. Ajustando a {effective_chunk_frames} frames para mantener múltiplo de 4.")
+            loop.global_is_final_chunk = True
+        else:
+            loop.global_is_final_chunk = False
 
         skip_frames = current_pos
 

@@ -163,6 +163,9 @@ class AutoLoopCalculatorLTX:
 
         if current_pos + (effective_chunk_frames * select_every_nth) >= physical_source_frame_count:
             print(f"   -> 🏁 Chunk final LTX detectado. Ajustando a {effective_chunk_frames} frames para mantener regla 8n+1.")
+            loop.global_is_final_chunk = True
+        else:
+            loop.global_is_final_chunk = False
 
         skip_frames = current_pos
 
