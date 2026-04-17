@@ -213,3 +213,53 @@ class VAESafeFramePadder:
 
         print(f"{'='*50}\n")
         return (images, diff)
+
+@register_node
+class VHS_Path_Selector:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "vhs_filenames": ("VHS_FILENAMES",),
+                "select_file": (["video_with_audio", "video_muted", "png_thumbnail"],),
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("file_path",)
+    FUNCTION = "select"
+    CATEGORY = "Custom Utils/Video"
+
+    def select(self, vhs_filenames, select_file):
+        try:
+            # Comprobación de seguridad básica: ¿Tenemos una entrada válida?
+            if vhs_filenames is None or not isinstance(vhs_filenames, (list, tuple)) or len(vhs_filenames) < 2:
+                print("⚠️ [Path Selector] Entrada vhs_filenames vacía o inválida.")
+                return ("",)
+
+            paths = vhs_filenames[1]
+
+            # Asegurarnos de que paths es una lista y tiene contenido
+            if not isinstance(paths, list) or not paths:
+                print("⚠️ [Path Selector] La lista de rutas está vacía.")
+                return ("",)
+
+            # Buscamos los tipos de archivo de forma segura
+            audio_path = next((s for s in paths if isinstance(s, str) and s.endswith("-audio.mp4")), None)
+            muted_path = next((s for s in paths if isinstance(s, str) and s.endswith(".mp4") and not s.endswith("-audio.mp4")), None)
+            png_path = next((s for s in paths if isinstance(s, str) and s.endswith(".png")), None)
+
+            # Lógica de selección con fallbacks inteligentes
+            if select_file == "video_with_audio":
+                result = audio_path if audio_path else (muted_path if muted_path else paths[0])
+            elif select_file == "video_muted":
+                result = muted_path if muted_path else (audio_path if audio_path else paths[0])
+            else: # png_thumbnail
+                result = png_path if png_path else paths[0]
+
+            print(f"📂 [Path Selector] Enviando: {result}")
+            return (str(result),)
+
+        except Exception as e:
+            print(f"❌ [Path Selector] Error crítico: {e}")
+            return ("",)
