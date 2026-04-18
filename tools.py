@@ -225,31 +225,28 @@ class VHS_Path_Selector:
             }
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("file_path",)
+    # 🔄 Ahora devuelve la cadena y el objeto VHS reordenado
+    RETURN_TYPES = ("STRING", "VHS_FILENAMES")
+    RETURN_NAMES = ("file_path", "vhs_filenames")
     FUNCTION = "select"
-    CATEGORY = "Custom Utils/Video"
+    CATEGORY = "🔁 Sequential Batcher/Tools" # 📍 Ubicación corregida
 
     def select(self, vhs_filenames, select_file):
         try:
-            # Comprobación de seguridad básica: ¿Tenemos una entrada válida?
             if vhs_filenames is None or not isinstance(vhs_filenames, (list, tuple)) or len(vhs_filenames) < 2:
                 print("⚠️ [Path Selector] Entrada vhs_filenames vacía o inválida.")
-                return ("",)
+                return ("", vhs_filenames)
 
             paths = vhs_filenames[1]
-
-            # Asegurarnos de que paths es una lista y tiene contenido
             if not isinstance(paths, list) or not paths:
-                print("⚠️ [Path Selector] La lista de rutas está vacía.")
-                return ("",)
+                return ("", vhs_filenames)
 
-            # Buscamos los tipos de archivo de forma segura
+            # Identificación de archivos
             audio_path = next((s for s in paths if isinstance(s, str) and s.endswith("-audio.mp4")), None)
             muted_path = next((s for s in paths if isinstance(s, str) and s.endswith(".mp4") and not s.endswith("-audio.mp4")), None)
             png_path = next((s for s in paths if isinstance(s, str) and s.endswith(".png")), None)
 
-            # Lógica de selección con fallbacks inteligentes
+            # Selección del archivo principal (result)
             if select_file == "video_with_audio":
                 result = audio_path if audio_path else (muted_path if muted_path else paths[0])
             elif select_file == "video_muted":
@@ -257,9 +254,18 @@ class VHS_Path_Selector:
             else: # png_thumbnail
                 result = png_path if png_path else paths[0]
 
-            print(f"📂 [Path Selector] Enviando: {result}")
-            return (str(result),)
+            # 🪄 REORDENADO: Ponemos el elegido en la posición 0
+            new_paths = list(paths)
+            if result in new_paths:
+                new_paths.remove(result)
+            new_paths.insert(0, result)
+
+            # Creamos el nuevo paquete VHS [bool, [lista_reordenada]]
+            reordered_vhs = [vhs_filenames[0], new_paths]
+
+            print(f"📂 [Path Selector] Selección: {select_file} -> {result}")
+            return (str(result), reordered_vhs)
 
         except Exception as e:
             print(f"❌ [Path Selector] Error crítico: {e}")
-            return ("",)
+            return ("", vhs_filenames)
