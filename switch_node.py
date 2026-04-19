@@ -17,8 +17,8 @@ class MasterSwitch:
             }
         }
 
-    RETURN_TYPES = (any_type,)
-    RETURN_NAMES = ("output",)
+    RETURN_TYPES = (any_type, "STRING")
+    RETURN_NAMES = ("output", "log")
     FUNCTION = "route"
     CATEGORY = "🔁 Sequential Batcher/Logic"
 
@@ -30,7 +30,11 @@ class MasterSwitch:
             return ["on_false"]
 
     def route(self, is_final_cycle, on_true=None, on_false=None):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
         if is_final_cycle:
-            return (on_true,)
+            return (on_true, "\n".join(log_output))
         else:
-            return (on_false,)
+            return (on_false, "\n".join(log_output))
