@@ -14,12 +14,16 @@ class BaseResolutionTool:
             }
         }
 
-    RETURN_TYPES = ("INT", "INT", "STRING")
-    RETURN_NAMES = ("width", "height", "debug_info")
+    RETURN_TYPES = ("INT", "INT", "STRING", "STRING")
+    RETURN_NAMES = ("width", "height", "debug_info", "log")
     FUNCTION = "get_resolution"
     CATEGORY = "🔁 Sequential Batcher/Tools"
 
     def get_resolution(self, aspect_ratio, base_resolution):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
         div = self.DIVISOR
         min_pixels = getattr(self, "MIN_PIXELS", 0)
         longest_side = int(base_resolution) # Mantenemos el casting por seguridad
@@ -29,9 +33,9 @@ class BaseResolutionTool:
         h_ratio = float(h_str)
         ratio = w_ratio / h_ratio
 
-        print(f"\n{'='*50}")
-        print(f"🛠️ [DEBUG] NODO: Resolution Tool {div}x")
-        print(f"   -> Petición Original: Lado mayor {longest_side}px | Ratio {aspect_ratio}")
+        _log(f"\n{'='*50}")
+        _log(f"🛠️ [Secuencial Batcher] NODO: Resolution Tool {div}x")
+        _log(f"   -> Petición Original: Lado mayor {longest_side}px | Ratio {aspect_ratio}")
 
         # 1. Calcular resolución inicial teórica
         if w_ratio >= h_ratio:
@@ -45,8 +49,8 @@ class BaseResolutionTool:
 
         # 2. 🛡️ Protección de Suelo por ÁREA TOTAL (Training Floor)
         if current_pixels < min_pixels:
-            print(f"   -> ⚠️ ALERTA: La resolución pedida ({int(current_pixels)} píxeles) es inferior al mínimo vital del modelo ({min_pixels} píxeles).")
-            print(f"   -> 🛡️ Escalando proporcionalmente para evitar artefactos...")
+            _log(f"   -> ⚠️ ALERTA: La resolución pedida ({int(current_pixels)} píxeles) es inferior al mínimo vital del modelo ({min_pixels} píxeles).")
+            _log(f"   -> 🛡️ Escalando proporcionalmente para evitar artefactos...")
             # Factor de escala basado en área
             scale_factor = math.sqrt(min_pixels / current_pixels)
             ideal_w *= scale_factor
@@ -59,10 +63,10 @@ class BaseResolutionTool:
 
         debug_msg = f"{width}x{height} (Div {div})"
 
-        print(f"   -> 🎯 Resultado Final Seguro: Ancho {width} | Alto {height} | Píxeles totales: {width*height}")
-        print(f"{'='*50}\n")
+        _log(f"   -> 🎯 Resultado Final Seguro: Ancho {width} | Alto {height} | Píxeles totales: {width*height}")
+        _log(f"{'='*50}\n")
 
-        return (width, height, debug_msg)
+        return (width, height, debug_msg, "\n".join(log_output))
 
 # 📦 Nodos Específicos Blindados por Píxeles
 @register_node
@@ -102,31 +106,35 @@ class AutoFPSLimiter:
             }
         }
 
-    RETURN_TYPES = ("INT", "FLOAT")
-    RETURN_NAMES = ("select_every_nth", "new_fps")
+    RETURN_TYPES = ("INT", "FLOAT", "STRING")
+    RETURN_NAMES = ("select_every_nth", "new_fps", "log")
     FUNCTION = "calculate_fps"
     CATEGORY = "🔁 Sequential Batcher/Tools"
 
     def calculate_fps(self, source_fps, target_max_fps):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
         import math
-        print(f"\n{'='*50}")
-        print(f"⏱️ [DEBUG] NODO: Auto FPS Limiter")
-        print(f"   -> FPS Originales: {source_fps:.2f} | Meta Máxima: {target_max_fps:.2f}")
+        _log(f"\n{'='*50}")
+        _log(f"⏱️ [Secuencial Batcher] NODO: Auto FPS Limiter")
+        _log(f"   -> FPS Originales: {source_fps:.2f} | Meta Máxima: {target_max_fps:.2f}")
 
         if source_fps <= target_max_fps:
             nth = 1
             new_fps = source_fps
-            print(f"   -> ✅ Los FPS originales ya están dentro del límite.")
+            _log(f"   -> ✅ Los FPS originales ya están dentro del límite.")
         else:
             # Calculamos el salto matemático (hacia arriba) para garantizar no superar la meta
             nth = math.ceil(source_fps / target_max_fps)
             new_fps = source_fps / nth
-            print(f"   -> ✂️ Reducción necesaria. Procesando 1 de cada {nth} frames.")
+            _log(f"   -> ✂️ Reducción necesaria. Procesando 1 de cada {nth} frames.")
 
-        print(f"   -> 🎯 Resultado: {new_fps:.2f} FPS finales (Nth: {nth})")
-        print(f"{'='*50}\n")
+        _log(f"   -> 🎯 Resultado: {new_fps:.2f} FPS finales (Nth: {nth})")
+        _log(f"{'='*50}\n")
 
-        return (nth, new_fps)
+        return (nth, new_fps, "\n".join(log_output))
 
 @register_node
 class ConditionalAudioRouter:
@@ -139,17 +147,21 @@ class ConditionalAudioRouter:
             }
         }
 
-    RETURN_TYPES = ("AUDIO",)
-    RETURN_NAMES = ("routed_audio",)
+    RETURN_TYPES = ("AUDIO", "STRING")
+    RETURN_NAMES = ("routed_audio", "log")
     FUNCTION = "route"
     CATEGORY = "🔁 Sequential Batcher/Tools"
 
     def route(self, audio, is_final_cycle):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
         if is_final_cycle:
-            print("   -> 🔊 [Audio Router] Ciclo Final: Enviando pista de audio completa al Lip Sync.")
-            return (audio,)
+            _log("   -> 🔊 [Audio Router] Ciclo Final: Enviando pista de audio completa al Lip Sync.")
+            return (audio, "\n".join(log_output))
         else:
-            print("   -> 🔇 [Audio Router] Ciclo Intermedio: Generando micro-silencio para bypasear el Lip Sync...")
+            _log("   -> 🔇 [Audio Router] Ciclo Intermedio: Generando micro-silencio para bypasear el Lip Sync...")
 
             # Detectar el sample rate del audio original (estándar de ComfyUI es un dict)
             sample_rate = 44100
@@ -161,7 +173,7 @@ class ConditionalAudioRouter:
             dummy_waveform = torch.zeros((1, 1, samples), dtype=torch.float32)
             dummy_audio = {"waveform": dummy_waveform, "sample_rate": sample_rate}
 
-            return (dummy_audio,)
+            return (dummy_audio, "\n".join(log_output))
 
 @register_node
 class VAESafeFramePadder:
@@ -174,12 +186,16 @@ class VAESafeFramePadder:
             }
         }
 
-    RETURN_TYPES = ("IMAGE", "INT")
-    RETURN_NAMES = ("PADDED_IMAGES", "frames_added")
+    RETURN_TYPES = ("IMAGE", "INT", "STRING")
+    RETURN_NAMES = ("PADDED_IMAGES", "frames_added", "log")
     FUNCTION = "pad"
     CATEGORY = "🔁 Sequential Batcher/Tools"
 
     def pad(self, images, rule):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
         n_frames = images.shape[0]
         target_frames = n_frames
 
@@ -197,22 +213,22 @@ class VAESafeFramePadder:
 
         diff = target_frames - n_frames
 
-        print(f"\n{'='*50}")
-        print(f"🛡️ [DEBUG] NODO: VAE Safe Frame Padder")
-        print(f"   -> Frames recibidos: {n_frames}")
-        print(f"   -> Regla aplicada: {rule}")
+        _log(f"\n{'='*50}")
+        _log(f"🛡️ [Secuencial Batcher] NODO: VAE Safe Frame Padder")
+        _log(f"   -> Frames recibidos: {n_frames}")
+        _log(f"   -> Regla aplicada: {rule}")
 
         if diff > 0:
-            print(f"   -> 🧱 Tensor incompleto. Clonando el último frame {diff} vez/veces...")
+            _log(f"   -> 🧱 Tensor incompleto. Clonando el último frame {diff} vez/veces...")
             last_frame = images[-1:] # Extraemos el último frame
             padding = last_frame.repeat(diff, 1, 1, 1) # Lo multiplicamos
             images = torch.cat([images, padding], dim=0) # Lo fusionamos al final
-            print(f"   -> ✅ Tensor final acolchado a: {target_frames} frames.")
+            _log(f"   -> ✅ Tensor final acolchado a: {target_frames} frames.")
         else:
-            print(f"   -> ✅ Tensor perfecto. No requiere acolchado.")
+            _log(f"   -> ✅ Tensor perfecto. No requiere acolchado.")
 
-        print(f"{'='*50}\n")
-        return (images, diff)
+        _log(f"{'='*50}\n")
+        return (images, diff, "\n".join(log_output))
 
 @register_node
 class VHS_Path_Selector:
@@ -226,20 +242,24 @@ class VHS_Path_Selector:
         }
 
     # 🔄 Ahora devuelve la cadena y el objeto VHS reordenado
-    RETURN_TYPES = ("STRING", "VHS_FILENAMES")
-    RETURN_NAMES = ("file_path", "vhs_filenames")
+    RETURN_TYPES = ("STRING", "VHS_FILENAMES", "STRING")
+    RETURN_NAMES = ("file_path", "vhs_filenames", "log")
     FUNCTION = "select"
     CATEGORY = "🔁 Sequential Batcher/Tools" # 📍 Ubicación corregida
 
     def select(self, vhs_filenames, select_file):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
         try:
             if vhs_filenames is None or not isinstance(vhs_filenames, (list, tuple)) or len(vhs_filenames) < 2:
-                print("⚠️ [Path Selector] Entrada vhs_filenames vacía o inválida.")
-                return ("", vhs_filenames)
+                _log("⚠️ [Path Selector] Entrada vhs_filenames vacía o inválida.")
+                return ("", vhs_filenames, "\n".join(log_output))
 
             paths = vhs_filenames[1]
             if not isinstance(paths, list) or not paths:
-                return ("", vhs_filenames)
+                return ("", vhs_filenames, "\n".join(log_output))
 
             # Identificación de archivos
             audio_path = next((s for s in paths if isinstance(s, str) and s.endswith("-audio.mp4")), None)
@@ -263,9 +283,9 @@ class VHS_Path_Selector:
             # Creamos el nuevo paquete VHS [bool, [lista_reordenada]]
             reordered_vhs = [vhs_filenames[0], new_paths]
 
-            print(f"📂 [Path Selector] Selección: {select_file} -> {result}")
-            return (str(result), reordered_vhs)
+            _log(f"📂 [Path Selector] Selección: {select_file} -> {result}")
+            return (str(result), reordered_vhs, "\n".join(log_output))
 
         except Exception as e:
-            print(f"❌ [Path Selector] Error crítico: {e}")
-            return ("", vhs_filenames)
+            _log(f"❌ [Path Selector] Error crítico: {e}")
+            return ("", vhs_filenames, "\n".join(log_output))

@@ -53,8 +53,8 @@ class VideoAnalyzerWithAudio:
             }
         }
 
-    RETURN_TYPES = ("*", "INT", "FLOAT", "AUDIO", "FACE_CUTS", "IMAGE")
-    RETURN_NAMES = ("video_path", "total_frames", "source_fps", "source_audio", "safe_faces_list", "reference_frame")
+    RETURN_TYPES = ("*", "INT", "FLOAT", "AUDIO", "FACE_CUTS", "IMAGE", "STRING")
+    RETURN_NAMES = ("video_path", "total_frames", "source_fps", "source_audio", "safe_faces_list", "reference_frame", "log")
     OUTPUT_NODE = True
     FUNCTION = "analyze"
     CATEGORY = "🔁 Sequential Batcher/Video"
@@ -73,24 +73,28 @@ class VideoAnalyzerWithAudio:
         return True
 
     def analyze(self, video, reference_frame_idx, use_face_detector, blur_threshold, unload_detector_after_analysis=True, bbox_detector=None, **kwargs):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
         # Resolución unificada de la ruta, tal como hace VHS
         if os.path.exists(video):
             video_path = video
         else:
             video_path = folder_paths.get_annotated_filepath(video)
 
-        print(f"\n{'='*50}")
-        print(f"🕵️ [DEBUG] NODO: Video Analyzer (Explorador)")
-        print(f"   -> Archivo resuelto: {video_path}")
+        _log(f"\n{'='*50}")
+        _log(f"🕵️ [Secuencial Batcher] NODO: Video Analyzer (Explorador)")
+        _log(f"   -> Archivo resuelto: {video_path}")
 
         # 1. Extracción de Audio Íntegro
         source_audio = None
         try:
             waveform, sample_rate = torchaudio.load(video_path)
             source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
-            print(f"   -> 🎵 Audio extraído correctamente ({sample_rate}Hz)")
+            _log(f"   -> 🎵 Audio extraído correctamente ({sample_rate}Hz)")
         except Exception as e:
-            print(f"   -> ⚠️ Sin audio o error al extraer: {e}")
+            _log(f"   -> ⚠️ Sin audio o error al extraer: {e}")
 
         # 2. Escaneo de OpenCV (Frames, Rostros y Referencia)
         frame_count = 0
@@ -100,13 +104,13 @@ class VideoAnalyzerWithAudio:
         ui_result = {}
 
         if not HAS_OPENCV:
-            print("   -> ❌ ERROR: OpenCV no está instalado. Ejecuta: pip install opencv-python")
+            _log("   -> ❌ ERROR: OpenCV no está instalado. Ejecuta: pip install opencv-python")
         else:
             cap = cv2.VideoCapture(video_path)
             frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             source_fps = float(cap.get(cv2.CAP_PROP_FPS))
-            print(f"   -> 🎞️ Total Frames detectados: {frame_count}")
-            print(f"   -> ⏱️ FPS detectados: {source_fps}")
+            _log(f"   -> 🎞️ Total Frames detectados: {frame_count}")
+            _log(f"   -> ⏱️ FPS detectados: {source_fps}")
 
             # Extraer el Frame de Referencia específico
             safe_ref_idx = min(reference_frame_idx, max(0, frame_count - 1))
@@ -119,7 +123,7 @@ class VideoAnalyzerWithAudio:
                 # Convertir a Tensor (1, H, W, 3)
                 ref_tensor = torch.from_numpy(ref_frame_rgb).float() / 255.0
                 ref_tensor = ref_tensor.unsqueeze(0)
-                print(f"   -> 🖼️ Frame de referencia extraído (Índice: {safe_ref_idx})")
+                _log(f"   -> 🖼️ Frame de referencia extraído (Índice: {safe_ref_idx})")
 
                 # Generar imagen temporal para el Preview de la UI
                 import random
@@ -131,11 +135,11 @@ class VideoAnalyzerWithAudio:
 
             # Escaneo de Rostros
             if bbox_detector is not None or use_face_detector:
-                print(f"   -> 🤖 Iniciando escaneo de rostros (Umbral: {blur_threshold})...")
+                _log(f"   -> 🤖 Iniciando escaneo de rostros (Umbral: {blur_threshold})...")
                 if bbox_detector is not None:
-                    print(f"   -> ⚡ Usando detector de rostros por GPU (YOLO/ONNX).")
+                    _log(f"   -> ⚡ Usando detector de rostros por GPU (YOLO/ONNX).")
                 else:
-                    print(f"   -> 🐢 Usando detector de rostros por CPU (OpenCV).")
+                    _log(f"   -> 🐢 Usando detector de rostros por CPU (OpenCV).")
 
                 if HAS_OPENCV:
                     cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
@@ -143,7 +147,7 @@ class VideoAnalyzerWithAudio:
 
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0) # Volver al inicio
 
-                print(f"   -> 🤖 Iniciando escaneo de rostros por GPU...")
+                _log(f"   -> 🤖 Iniciando escaneo de rostros por GPU...")
 
                 # Silenciamos el logger de ultralytics antes de empezar
                 logging.getLogger("ultralytics").setLevel(logging.ERROR)
@@ -198,11 +202,11 @@ class VideoAnalyzerWithAudio:
                     comfy_pbar.update(1)
 
                 pbar.close() # Cerramos la barra al terminar
-                print(f"   -> ✅ Encontrados {len(safe_faces)} frames nítidos con rostros.")
+                _log(f"   -> ✅ Encontrados {len(safe_faces)} frames nítidos con rostros.")
 
                 # Descarga de VRAM
                 if unload_detector_after_analysis:
-                    print(f"   -> 🧹 Descargando detector de rostros de la VRAM...")
+                    _log(f"   -> 🧹 Descargando detector de rostros de la VRAM...")
                     import gc
                     import comfy.model_management as mm
                     mm.unload_all_models()
@@ -210,13 +214,13 @@ class VideoAnalyzerWithAudio:
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
             else:
-                print(f"   -> 🤖 Escaneo de rostros DESACTIVADO.")
+                _log(f"   -> 🤖 Escaneo de rostros DESACTIVADO.")
 
             cap.release()
 
         # Auto-limpieza del detector para liberar VRAM inmediatamente
         if kwargs.get("unload_detector", True):
-            print("   -> 🧹 Descargando modelo del detector de rostros de la VRAM...")
+            _log("   -> 🧹 Descargando modelo del detector de rostros de la VRAM...")
             if bbox_detector is not None:
                 del bbox_detector
             if HAS_OPENCV and 'face_cascade' in locals():
@@ -226,10 +230,10 @@ class VideoAnalyzerWithAudio:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-        print(f"{'='*50}\n")
+        _log(f"{'='*50}\n")
 
         # 💡 EL BYPASS A VHS: Pasamos video_path (Ruta Absoluta) en lugar de video_name
-        return {"ui": ui_result, "result": (video_path, frame_count, source_fps, source_audio, safe_faces, ref_tensor)}
+        return {"ui": ui_result, "result": (video_path, frame_count, source_fps, source_audio, safe_faces, ref_tensor, "\n".join(log_output))}
 
 @register_node
 class AutoLoopCalculator:
@@ -247,12 +251,16 @@ class AutoLoopCalculator:
             }
         }
 
-    RETURN_TYPES = ("INT", "INT", "INT")
-    RETURN_NAMES = ("chunk_frames", "skip_frames", "select_every_nth")
+    RETURN_TYPES = ("INT", "INT", "INT", "STRING")
+    RETURN_NAMES = ("chunk_frames", "skip_frames", "select_every_nth", "log")
     FUNCTION = "calculate"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
     def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index, safe_faces_list=None):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
         # --- Ajuste Proporcional Base (Sin restricciones VAE) ---
         import math
         from . import loop
@@ -267,28 +275,28 @@ class AutoLoopCalculator:
         estimated_loops = math.ceil(safe_effective_frames / target_frames_per_loop)
         if estimated_loops > 0:
             target_frames_per_loop = math.ceil(safe_effective_frames / estimated_loops)
-            print(f"   -> ⚖️ Ajuste Proporcional: Target recalculado a {target_frames_per_loop} frames por ciclo.")
+            _log(f"   -> ⚖️ Ajuste Proporcional: Target recalculado a {target_frames_per_loop} frames por ciclo.")
 
         # --- LOGS MEJORADOS Y TRANSPARENTES ---
-        print(f"   -> 🎞️ Capacidad del video: {potential_effective_frames} frames procesables (Nth: {select_every_nth})")
+        _log(f"   -> 🎞️ Capacidad del video: {potential_effective_frames} frames procesables (Nth: {select_every_nth})")
         if effective_loss > 0:
-            print(f"   -> 🛡️ Ajuste VAE: Se usarán {safe_effective_frames} frames (Descarte técnico: {effective_loss} frame/s de proceso)")
+            _log(f"   -> 🛡️ Ajuste VAE: Se usarán {safe_effective_frames} frames (Descarte técnico: {effective_loss} frame/s de proceso)")
         else:
-            print(f"   -> ✅ Ajuste VAE: Perfecto. Múltiplo de 4 detectado.") # Manteniendo el mismo string por ahora o podemos omitirlo, lo adapto a que es genérico
+            _log(f"   -> ✅ Ajuste VAE: Perfecto. Múltiplo de 4 detectado.") # Manteniendo el mismo string por ahora o podemos omitirlo, lo adapto a que es genérico
 
-        print(f"   -> 📊 Timeline final: 0 a {safe_source_frame_count} (de {source_frame_count} totales)")
+        _log(f"   -> 📊 Timeline final: 0 a {safe_source_frame_count} (de {source_frame_count} totales)")
         # -------------------------------------------------------------
 
         loop.global_select_every_nth = select_every_nth
 
         current_pos = loop.global_accumulated_frames
 
-        print(f"\n{'='*50}")
-        print(f"📊 [DEBUG] NODO: Auto Loop Calculator (Motor Dinámico)")
-        print(f"   -> Posición en el timeline original: {current_pos} / {source_frame_count}")
+        _log(f"\n{'='*50}")
+        _log(f"📊 [Secuencial Batcher] NODO: Auto Loop Calculator (Motor Dinámico)")
+        _log(f"   -> Posición en el timeline original: {current_pos} / {source_frame_count}")
 
         if current_pos >= safe_source_frame_count:
-            return (1, current_pos, select_every_nth)
+            return (1, current_pos, select_every_nth, "\n".join(log_output))
 
         frames_left = safe_source_frame_count - current_pos
 
@@ -298,16 +306,16 @@ class AutoLoopCalculator:
 
         if frames_left <= equitable_target:
             best_cut = safe_source_frame_count
-            print(f"   -> 🧮 Absorbiendo resto final: meta fijada en frame {best_cut}")
+            _log(f"   -> 🧮 Absorbiendo resto final: meta fijada en frame {best_cut}")
         else:
             best_cut = ideal_cut
             if safe_faces_list and len(safe_faces_list) > 0:
                 # Find the safe face closest to the equitable target
                 closest_face = min(safe_faces_list, key=lambda x: abs(x - ideal_cut))
                 best_cut = closest_face
-                print(f"   -> ✂️ Corte Inteligente proyectado: {best_cut} (Meta equitativa: {ideal_cut})")
+                _log(f"   -> ✂️ Corte Inteligente proyectado: {best_cut} (Meta equitativa: {ideal_cut})")
             else:
-                print(f"   -> ⚖️ Sin caras detectadas. Forzando corte equitativo: {ideal_cut}")
+                _log(f"   -> ⚖️ Sin caras detectadas. Forzando corte equitativo: {ideal_cut}")
 
         effective_chunk_frames = math.ceil((best_cut - current_pos) / select_every_nth)
         if current_pos + (effective_chunk_frames * select_every_nth) > safe_source_frame_count:
@@ -315,10 +323,10 @@ class AutoLoopCalculator:
 
         skip_frames = current_pos
 
-        print(f"   -> 🚀 Ciclo {current_loop_index}: Solicitando {effective_chunk_frames} frames efectivos (Saltando {skip_frames})")
-        print(f"{'='*50}\n")
+        _log(f"   -> 🚀 Ciclo {current_loop_index}: Solicitando {effective_chunk_frames} frames efectivos (Saltando {skip_frames})")
+        _log(f"{'='*50}\n")
 
-        return (effective_chunk_frames, skip_frames, select_every_nth)
+        return (effective_chunk_frames, skip_frames, select_every_nth, "\n".join(log_output))
 
 @register_node
 class IncrementalVideoStitcher:
@@ -332,8 +340,8 @@ class IncrementalVideoStitcher:
             }
         }
 
-    RETURN_TYPES = ("IMAGE", "AUDIO", "BOOLEAN")
-    RETURN_NAMES = ("ALL_IMAGES", "AUDIO_OUT", "IS_FINAL_CYCLE")
+    RETURN_TYPES = ("IMAGE", "AUDIO", "BOOLEAN", "STRING")
+    RETURN_NAMES = ("ALL_IMAGES", "AUDIO_OUT", "IS_FINAL_CYCLE", "log")
     FUNCTION = "stitch"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
@@ -344,6 +352,10 @@ class IncrementalVideoStitcher:
         return time.time()
 
     def stitch(self, images, audio, current_loop_index):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
         from . import loop
         import os, folder_paths, torch, shutil, time
         from PIL import Image
@@ -356,14 +368,14 @@ class IncrementalVideoStitcher:
                 try: shutil.rmtree(cache_dir)
                 except Exception as e: pass
             os.makedirs(cache_dir, exist_ok=True)
-            print(f"\n🧹 [Stitcher] Ciclo 0 detectado. Subcarpeta temporal limpiada.")
+            _log(f"\n🧹 [Stitcher] Ciclo 0 detectado. Subcarpeta temporal limpiada.")
         else:
             os.makedirs(cache_dir, exist_ok=True)
 
         timestamp = int(time.time() * 1000)
 
         # 🚀 FIX OOM RAM: Guardar frames individualmente como PNG (Ultra Ligero)
-        print(f"📦 [Stitcher] Guardando {images.shape[0]} frames como PNGs de alta calidad...")
+        _log(f"📦 [Stitcher] Guardando {images.shape[0]} frames como PNGs de alta calidad...")
         for i in range(images.shape[0]):
             filename = f"frame_{current_loop_index:04d}_{timestamp}_{i:04d}.png"
             path = os.path.join(cache_dir, filename)
@@ -375,20 +387,20 @@ class IncrementalVideoStitcher:
         is_final_chunk = getattr(loop, 'global_is_final_chunk', False)
 
         if is_final_chunk or loop.global_accumulated_frames >= source_total:
-            print(f"   -> 🏁 ¡Último ciclo detectado! Ensamblando PNGs desde la caché temporal...")
+            _log(f"   -> 🏁 ¡Último ciclo detectado! Ensamblando PNGs desde la caché temporal...")
 
             png_files = sorted([f for f in os.listdir(cache_dir) if f.endswith('.png')])
 
             if not png_files:
-                print("   -> ❌ ERROR: No se encontraron frames en la subcarpeta.")
-                return (images, audio, True)
+                _log("   -> ❌ ERROR: No se encontraron frames en la subcarpeta.")
+                return (images, audio, True, "\n".join(log_output))
 
             # 🚀 OPTIMIZACIÓN EXTREMA DE RAM: Pre-asignamos el tensor en lugar de usar torch.cat
             first_img = Image.open(os.path.join(cache_dir, png_files[0]))
             H, W = first_img.height, first_img.width
             total_frames = len(png_files)
 
-            print(f"   -> 🧩 Reservando bloque continuo en RAM para {total_frames} frames...")
+            _log(f"   -> 🧩 Reservando bloque continuo en RAM para {total_frames} frames...")
             final_tensor = torch.empty((total_frames, H, W, 3), dtype=torch.float32, device="cpu")
 
             for i, f in enumerate(png_files):
@@ -396,19 +408,19 @@ class IncrementalVideoStitcher:
                 img_np = np.array(img).astype(np.float32) / 255.0
                 final_tensor[i] = torch.from_numpy(img_np)
 
-            print(f"✅ [Stitcher] VÍDEO COMPLETADO: {final_tensor.shape[0]} frames ensamblados con éxito.")
+            _log(f"✅ [Stitcher] VÍDEO COMPLETADO: {final_tensor.shape[0]} frames ensamblados con éxito.")
 
             try:
                 shutil.rmtree(cache_dir)
-                print(f"🧹 [Stitcher] Subcarpeta temporal destruida.")
+                _log(f"🧹 [Stitcher] Subcarpeta temporal destruida.")
             except:
                 pass
 
-            return (final_tensor, audio, True)
+            return (final_tensor, audio, True, "\n".join(log_output))
         else:
-            print(f"   -> ⏳ Ciclo intermedio. Frames PNG almacenados de forma segura. Pasando 1 frame dummy...")
+            _log(f"   -> ⏳ Ciclo intermedio. Frames PNG almacenados de forma segura. Pasando 1 frame dummy...")
             dummy_frame = images[-1:].clone()
-            return (dummy_frame, None, False)
+            return (dummy_frame, None, False, "\n".join(log_output))
 
 @register_node
 class AutoLoopCalculatorWan:
@@ -426,12 +438,16 @@ class AutoLoopCalculatorWan:
             }
         }
 
-    RETURN_TYPES = ("INT", "INT", "INT")
-    RETURN_NAMES = ("chunk_frames", "skip_frames", "select_every_nth")
+    RETURN_TYPES = ("INT", "INT", "INT", "STRING")
+    RETURN_NAMES = ("chunk_frames", "skip_frames", "select_every_nth", "log")
     FUNCTION = "calculate"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
     def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index, safe_faces_list=None):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
         import math
         from . import loop
 
@@ -456,26 +472,26 @@ class AutoLoopCalculatorWan:
         if estimated_loops > 0:
             optimal_target = math.ceil(safe_effective_frames / estimated_loops)
             adjusted_target = ((optimal_target + 2) // 4) * 4 + 1
-            print(f"   -> ⚖️ Ajuste Proporcional: Target recalculado de {target_frames_per_loop} a {adjusted_target} frames por ciclo (para {estimated_loops} ciclos)")
+            _log(f"   -> ⚖️ Ajuste Proporcional: Target recalculado de {target_frames_per_loop} a {adjusted_target} frames por ciclo (para {estimated_loops} ciclos)")
             target_frames_per_loop = adjusted_target
 
-        print(f"   -> 🎞️ Capacidad del video original: {potential_effective_frames} frames (Nth: {select_every_nth})")
+        _log(f"   -> 🎞️ Capacidad del video original: {potential_effective_frames} frames (Nth: {select_every_nth})")
         if effective_padding > 0:
-            print(f"   -> 🛡️ Ajuste VAE: Se pedirán {safe_effective_frames} frames (Acolchado técnico: Se rellenarán {effective_padding} frames)")
+            _log(f"   -> 🛡️ Ajuste VAE: Se pedirán {safe_effective_frames} frames (Acolchado técnico: Se rellenarán {effective_padding} frames)")
         else:
-            print(f"   -> ✅ Ajuste VAE: Perfecto. Regla 4n+1 detectada.")
+            _log(f"   -> ✅ Ajuste VAE: Perfecto. Regla 4n+1 detectada.")
 
-        print(f"   -> 📊 Timeline final: 0 a {physical_source_frame_count} (Límite Físico Real)")
+        _log(f"   -> 📊 Timeline final: 0 a {physical_source_frame_count} (Límite Físico Real)")
 
         current_pos = getattr(loop, 'global_accumulated_frames', 0)
 
-        print(f"\n{'='*50}")
-        print(f"📊 [DEBUG] NODO: Auto Loop Calculator (WanVideo 3D VAE)")
-        print(f"   -> Timeline físico ajustado: {current_pos} / {physical_source_frame_count} (Original: {source_frame_count})")
+        _log(f"\n{'='*50}")
+        _log(f"📊 [Secuencial Batcher] NODO: Auto Loop Calculator (WanVideo 3D VAE)")
+        _log(f"   -> Timeline físico ajustado: {current_pos} / {physical_source_frame_count} (Original: {source_frame_count})")
 
         # Prevención de desbordamiento de bucle (Usando límite físico)
         if current_pos >= physical_source_frame_count:
-            return (4, current_pos, select_every_nth)
+            return (4, current_pos, select_every_nth, "\n".join(log_output))
 
         frames_left = physical_source_frame_count - current_pos
 
@@ -484,7 +500,7 @@ class AutoLoopCalculatorWan:
 
         if frames_left <= equitable_target:
             best_cut = physical_source_frame_count
-            print(f"   -> 🧮 Absorbiendo resto final seguro: meta fijada en frame {best_cut}")
+            _log(f"   -> 🧮 Absorbiendo resto final seguro: meta fijada en frame {best_cut}")
         else:
             best_cut = ideal_cut
             if safe_faces_list and len(safe_faces_list) > 0:
@@ -494,9 +510,9 @@ class AutoLoopCalculatorWan:
                 if safe_chunk_from_face < 4: safe_chunk_from_face = 4
 
                 best_cut = current_pos + (safe_chunk_from_face * select_every_nth)
-                print(f"   -> ✂️ Corte Inteligente (Ajustado x4): {best_cut} (Cara original detectada: {closest_face})")
+                _log(f"   -> ✂️ Corte Inteligente (Ajustado x4): {best_cut} (Cara original detectada: {closest_face})")
             else:
-                print(f"   -> ⚖️ Sin caras. Forzando corte equitativo x4: {ideal_cut}")
+                _log(f"   -> ⚖️ Sin caras. Forzando corte equitativo x4: {ideal_cut}")
 
         # 4. Cálculo final del chunk consolidado a regla 4n+1
         effective_chunk_frames = math.ceil((best_cut - current_pos) / select_every_nth)
@@ -508,14 +524,14 @@ class AutoLoopCalculatorWan:
 
         # Comprobación contra el límite físico para evitar pedir más allá del final
         if current_pos + (effective_chunk_frames * select_every_nth) >= physical_source_frame_count:
-            print(f"   -> 🏁 Chunk final detectado. Ajustando a {effective_chunk_frames} frames para mantener regla 4n+1.")
+            _log(f"   -> 🏁 Chunk final detectado. Ajustando a {effective_chunk_frames} frames para mantener regla 4n+1.")
             loop.global_is_final_chunk = True
         else:
             loop.global_is_final_chunk = False
 
         skip_frames = current_pos
 
-        print(f"   -> 🚀 Ciclo {current_loop_index}: Solicitando {effective_chunk_frames} frames efectivos a VHS (Saltando {skip_frames})")
-        print(f"{'='*50}\n")
+        _log(f"   -> 🚀 Ciclo {current_loop_index}: Solicitando {effective_chunk_frames} frames efectivos a VHS (Saltando {skip_frames})")
+        _log(f"{'='*50}\n")
 
-        return (effective_chunk_frames, skip_frames, select_every_nth)
+        return (effective_chunk_frames, skip_frames, select_every_nth, "\n".join(log_output))

@@ -29,8 +29,8 @@ class SessionImageReceiver:
             },
         }
 
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("current_image",)
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("current_image", "log")
     OUTPUT_NODE = True
     FUNCTION = "get_image"
     CATEGORY = "🔁 Sequential Batcher/Image"
@@ -40,6 +40,10 @@ class SessionImageReceiver:
         return time.time()
 
     def get_image(self, initial_image, current_loop_index):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
         from . import loop
         global global_session_image
 
@@ -50,23 +54,23 @@ class SessionImageReceiver:
         accumulated = getattr(loop, 'global_accumulated_frames', 0)
         source_total = getattr(loop, 'global_source_frame_count', 1)
 
-        print(f"\n{'='*50}")
-        print(f"📥 [DEBUG] NODO: Image Receiver")
-        print(f"   -> Ciclo actual: {loop_idx} | Progreso global: {accumulated} / {source_total} frames")
+        _log(f"\n{'='*50}")
+        _log(f"📥 [Secuencial Batcher] NODO: Image Receiver")
+        _log(f"   -> Ciclo actual: {loop_idx} | Progreso global: {accumulated} / {source_total} frames")
 
         if is_first or global_session_image is None:
             global_session_image = initial_image.clone().cpu()
-            print(f"   -> 🆕 Iniciando sesión con la imagen ORIGINAL.")
+            _log(f"   -> 🆕 Iniciando sesión con la imagen ORIGINAL.")
             selected = initial_image
         else:
-            print(f"   -> ♻️ Usando el Keyframe validado y rescatado de la RAM.")
+            _log(f"   -> ♻️ Usando el Keyframe validado y rescatado de la RAM.")
             selected = global_session_image
 
-        print(f"   -> 🖼️ Tensor shape: {selected.shape}")
-        print(f"{'='*50}\n")
+        _log(f"   -> 🖼️ Tensor shape: {selected.shape}")
+        _log(f"{'='*50}\n")
 
         ui_image = tensor_to_temp_image(selected, "receiver")
-        return {"ui": {"images": [ui_image]}, "result": (selected, )}
+        return {"ui": {"images": [ui_image]}, "result": (selected, "\n".join(log_output))}
 
 @register_node
 class SessionImageSender:
@@ -80,8 +84,8 @@ class SessionImageSender:
             },
         }
 
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("VALIDATED_IMAGES",)
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("VALIDATED_IMAGES", "log")
     OUTPUT_NODE = True
     FUNCTION = "set_image"
     CATEGORY = "🔁 Sequential Batcher/Image"
@@ -91,6 +95,10 @@ class SessionImageSender:
         return time.time()
 
     def set_image(self, generated_images, current_loop_index, detect_faces):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
         from . import loop
         import cv2
         import numpy as np
@@ -110,14 +118,14 @@ class SessionImageSender:
         stride = getattr(loop, 'global_select_every_nth', 1)
         ltx_mode_active = getattr(loop, 'global_ltx_mode', False)
 
-        print(f"\n{'='*50}")
-        print(f"📤 [DEBUG] NODO: Image Sender (Filtro Dinámico)")
-        print(f"   -> Frames recibidos de la IA: {batch_size}")
+        _log(f"\n{'='*50}")
+        _log(f"📤 [Secuencial Batcher] NODO: Image Sender (Filtro Dinámico)")
+        _log(f"   -> Frames recibidos de la IA: {batch_size}")
 
         # 🧠 BYPASS IMPLACABLE: Si al sumar este lote llegamos al final del video, NO RECORTAMOS
         advance_check = (batch_size - 1) * stride if ltx_mode_active else batch_size * stride
         if (accumulated + advance_check) >= source_total:
-            print(f"   -> 🏁 LOTE FINAL ABSOLUTO DETECTADO. Desactivando recorte de rostros para forzar la salida de TODOS los frames.")
+            _log(f"   -> 🏁 LOTE FINAL ABSOLUTO DETECTADO. Desactivando recorte de rostros para forzar la salida de TODOS los frames.")
             detect_faces = False
 
         if detect_faces:
@@ -125,7 +133,7 @@ class SessionImageSender:
                 cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
                 face_cascade = cv2.CascadeClassifier(cascade_path)
 
-                print(f"   -> 🕵️ Buscando el último rostro frontal en reversa (Desde frame {batch_size - 1} hasta 0)...")
+                _log(f"   -> 🕵️ Buscando el último rostro frontal en reversa (Desde frame {batch_size - 1} hasta 0)...")
 
                 found = False
                 for i in range(batch_size - 1, -1, -1):
@@ -136,16 +144,16 @@ class SessionImageSender:
                     if len(faces) > 0:
                         best_idx = i
                         found = True
-                        print(f"   -> ✅ Rostro detectado en el frame [{i}].")
+                        _log(f"   -> ✅ Rostro detectado en el frame [{i}].")
                         break
 
                 if not found:
-                    print(f"   -> ⚠️ ALERTA: No se detectó rostro frontal en NINGÚN frame. Aceptando todo el lote para evitar bucles infinitos.")
+                    _log(f"   -> ⚠️ ALERTA: No se detectó rostro frontal en NINGÚN frame. Aceptando todo el lote para evitar bucles infinitos.")
                     best_idx = batch_size - 1
             except Exception as e:
-                print(f"   -> ⚠️ Error en OpenCV al validar: {e}")
+                _log(f"   -> ⚠️ Error en OpenCV al validar: {e}")
         else:
-            print(f"   -> ⏩ Detección de rostros desactivada. Usando el último frame absoluto del lote ({batch_size - 1}).")
+            _log(f"   -> ⏩ Detección de rostros desactivada. Usando el último frame absoluto del lote ({batch_size - 1}).")
             best_idx = batch_size - 1
 
         # 1. TRUNCAR EL TENSOR
@@ -172,7 +180,7 @@ class SessionImageSender:
 
         # 🚀 FIX: Compensar los frames destruidos por el VAE en el ciclo final
         if is_final_chunk:
-            print(f"   -> 🏁 LOTE FINAL ABSOLUTO DETECTADO. Compensando mermas del VAE (Timeline forzado al 100%).")
+            _log(f"   -> 🏁 LOTE FINAL ABSOLUTO DETECTADO. Compensando mermas del VAE (Timeline forzado al 100%).")
             loop.global_accumulated_frames = source_total
         else:
             loop.global_accumulated_frames += advanced_original_frames
@@ -180,8 +188,8 @@ class SessionImageSender:
         # 🚀 NUEVO: Detectar si es el ciclo final o un ciclo único
         is_final_cycle = loop.global_accumulated_frames >= source_total
 
-        print(f"   -> ✂️ Tensor truncado a {frames_accepted} frames válidos.")
-        print(f"   -> 📈 Timeline avanzado a {loop.global_accumulated_frames} / {source_total}")
+        _log(f"   -> ✂️ Tensor truncado a {frames_accepted} frames válidos.")
+        _log(f"   -> 📈 Timeline avanzado a {loop.global_accumulated_frames} / {source_total}")
 
         last_frame = valid_images[-1:].clone().cpu()
         global_session_image = last_frame
@@ -196,11 +204,11 @@ class SessionImageSender:
             img = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
             img.save(filepath)
 
-            print(f"   -> 💾 Keyframe seguro guardado: {filename}")
+            _log(f"   -> 💾 Keyframe seguro guardado: {filename}")
         else:
-            print(f"   -> 🚀 Ciclo final/único detectado. Omitiendo guardado de keyframe.")
+            _log(f"   -> 🚀 Ciclo final/único detectado. Omitiendo guardado de keyframe.")
 
-        print(f"{'='*50}\n")
+        _log(f"{'='*50}\n")
 
         ui_image = tensor_to_temp_image(last_frame, "sender")
-        return {"ui": {"images": [ui_image]}, "result": (valid_images, )}
+        return {"ui": {"images": [ui_image]}, "result": (valid_images, "\n".join(log_output))}
