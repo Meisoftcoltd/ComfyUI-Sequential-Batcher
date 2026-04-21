@@ -12,14 +12,16 @@ def register_node(c, display_name=None):
 
 # Importar tools
 from . import image, loop, video, tools, vram_node
-from .switch_node import MasterSwitch
+from .switch_node import MasterSwitch, LazySessionCache
 
 NODE_CLASS_MAPPINGS.update({
     "MasterSwitch": MasterSwitch,
+    "LazySessionCache": LazySessionCache,
 })
 
 NODE_DISPLAY_NAME_MAPPINGS.update({
     "MasterSwitch": "🔀 Master Switch",
+    "LazySessionCache": "🗄️ Lazy Session Cache",
     "MeisoftVRAMDefragmenter": "🧹 VRAM Defragmenter",
     "SessionImageReceiver": "📥 Session Image Receiver",
     "SessionImageSender": "📤 Session Image Sender",
