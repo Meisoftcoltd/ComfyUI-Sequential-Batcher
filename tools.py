@@ -1,6 +1,43 @@
 import math
+import time
 import torch
 from . import register_node
+from .switch_node import any_type
+
+@register_node
+class PrimitiveDelay:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "delay_seconds": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 3600.0, "step": 0.1, "tooltip": "Tiempo de pausa en segundos"}),
+            },
+            "optional": {
+                "any_in": (any_type, {"tooltip": "Conecta aquí el cable que quieres retrasar"}),
+            }
+        }
+
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("* (passthrough)",)
+    FUNCTION = "execute_delay"
+    CATEGORY = "🔁 Sequential Batcher/Tools"
+
+    def execute_delay(self, delay_seconds, any_in=None):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
+
+        _log(f"\n{'='*50}")
+        _log(f"⏱️ [Secuencial Batcher] NODO: Primitive Delay")
+        _log(f"   -> Congelando la ejecución durante {delay_seconds} segundos...")
+
+        time.sleep(delay_seconds)
+
+        _log(f"   -> ✅ Pausa terminada. Reanudando flujo.")
+        _log(f"{'='*50}\n")
+
+        return (any_in,)
 
 # 🧠 Clase Base Invisible (El molde matemático por Megapíxeles)
 class BaseResolutionTool:
