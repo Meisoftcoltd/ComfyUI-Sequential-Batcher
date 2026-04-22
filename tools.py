@@ -326,3 +326,39 @@ class VHS_Path_Selector:
         except Exception as e:
             _log(f"❌ [Path Selector] Error crítico: {e}")
             return ("", vhs_filenames, "\n".join(log_output))
+
+@register_node
+class CycleMuter:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "current_loop_index": ("INT", {"default": 0, "forceInput": True}),
+            }
+        }
+
+    RETURN_TYPES = ("BOOLEAN",)
+    RETURN_NAMES = ("active",)
+    FUNCTION = "mute"
+    CATEGORY = "🔁 Sequential Batcher/Tools"
+
+    def mute(self, current_loop_index):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
+
+        # Extraer el índice de forma segura
+        idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
+
+        # Lógica central: Solo es True en el ciclo 0
+        is_active = (idx == 0)
+
+        _log(f"\n{'='*50}")
+        if is_active:
+            _log(f"🔊 [Secuencial Batcher] NODO: Cycle Muter -> Ciclo {idx}: Permitir mensajes (Active=True)")
+        else:
+            _log(f"🔇 [Secuencial Batcher] NODO: Cycle Muter -> Ciclo {idx}: Silenciando mensajes (Active=False)")
+        _log(f"{'='*50}\n")
+
+        return (is_active,)

@@ -33,6 +33,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "SequentialLoopStart": "🏁 Loop Start (Index)",
     "SequentialLoopTrigger": "🚀 Loop Trigger (Auto-Queue)",
     # Tools
+    "CycleMuter": "🔇 Cycle Muter",
     "AutoFPSLimiter": "⏱️ Auto FPS Limiter",
     "VAESafeFramePadder": "🛡️ VAE Safe Frame Padder",
     "ResTool8x": "📐 ResTool 8x (SD1.5)",
