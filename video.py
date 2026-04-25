@@ -10,12 +10,17 @@ import torchaudio
 import folder_paths
 import nodes
 import time
+import uuid
 from . import register_node
 
 # Aseguramos que torch esté disponible globalmente para los bloques de limpieza
 import torch
 
 # Intento de carga de OpenCV para el Director de Fotografía
+
+# Caché persistente para evitar re-escaneos pesados de vídeo
+VIDEO_ANALYSIS_CACHE = {}
+
 try:
     import cv2
     import numpy as np
@@ -24,7 +29,7 @@ except ImportError:
     HAS_OPENCV = False
 
 @register_node
-class VideoAnalyzerWithAudio:
+class VideoAnalyzerFaceDetector:
     @classmethod
     def INPUT_TYPES(cls):
         # 1. Obtenemos los archivos locales igual que VHS
@@ -50,6 +55,7 @@ class VideoAnalyzerWithAudio:
             },
             "optional": {
                 "bbox_detector": ("BBOX_DETECTOR", ), # 💡 Puerto para YOLO/ONNX
+                "current_loop_index": ("INT", {"default": 0, "forceInput": True}),
             }
         }
 
@@ -72,7 +78,7 @@ class VideoAnalyzerWithAudio:
         # Bypass para permitir conexiones dinámicas (como descargas en curso)
         return True
 
-    def analyze(self, video, reference_frame_idx, use_face_detector, blur_threshold, unload_detector_after_analysis=True, bbox_detector=None, **kwargs):
+    def analyze(self, video, reference_frame_idx, use_face_detector, blur_threshold, unload_detector_after_analysis=True, bbox_detector=None, current_loop_index=0, **kwargs):
         log_output = []
         def _log(msg):
             print(msg)
@@ -87,153 +93,282 @@ class VideoAnalyzerWithAudio:
         _log(f"🕵️ [Secuencial Batcher] NODO: Video Analyzer (Explorador)")
         _log(f"   -> Archivo resuelto: {video_path}")
 
-        # 1. Extracción de Audio Íntegro
-        source_audio = None
-        try:
-            waveform, sample_rate = torchaudio.load(video_path)
-            source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
-            _log(f"   -> 🎵 Audio extraído correctamente ({sample_rate}Hz)")
-        except Exception as e:
-            _log(f"   -> ⚠️ Sin audio o error al extraer: {e}")
+        cache_key = f"{video_path}_face"
 
-        # 2. Escaneo de OpenCV (Frames, Rostros y Referencia)
-        frame_count = 0
-        source_fps = 0.0
-        safe_faces = []
-        ref_tensor = torch.zeros((1, 64, 64, 3), dtype=torch.float32) # Tensor negro de seguridad
-        ui_result = {}
-
-        if not HAS_OPENCV:
-            _log("   -> ❌ ERROR: OpenCV no está instalado. Ejecuta: pip install opencv-python")
+        # --- LÓGICA DE CACHÉ / RECUPERACIÓN ---
+        if current_loop_index > 0 and cache_key in VIDEO_ANALYSIS_CACHE:
+            _log(f"♻️ [Face Detector] Ciclo {current_loop_index}: Recuperando análisis del caché.")
+            cached = VIDEO_ANALYSIS_CACHE[cache_key]
+            frame_count, source_fps, source_audio, safe_faces = cached
         else:
-            cap = cv2.VideoCapture(video_path)
-            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            source_fps = float(cap.get(cv2.CAP_PROP_FPS))
-            _log(f"   -> 🎞️ Total Frames detectados: {frame_count}")
-            _log(f"   -> ⏱️ FPS detectados: {source_fps}")
+            # Análisis completo (Solo Ciclo 0 o primer arranque)
+            _log(f"🎬 [Face Detector] Ciclo {current_loop_index}: Iniciando análisis profundo...")
+            # 1. Extracción de Audio Íntegro
+            source_audio = None
+            try:
+                waveform, sample_rate = torchaudio.load(video_path)
+                source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
+                _log(f"   -> 🎵 Audio extraído correctamente ({sample_rate}Hz)")
+            except Exception as e:
+                _log(f"   -> ⚠️ Sin audio o error al extraer: {e}")
 
-            # Extraer el Frame de Referencia específico
+            # 2. Escaneo de OpenCV (Frames, Rostros y Referencia)
+            frame_count = 0
+            source_fps = 0.0
+            safe_faces = []
+
+            if not HAS_OPENCV:
+                _log("   -> ❌ ERROR: OpenCV no está instalado. Ejecuta: pip install opencv-python")
+            else:
+                cap = cv2.VideoCapture(video_path)
+                frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                source_fps = float(cap.get(cv2.CAP_PROP_FPS))
+                _log(f"   -> 🎞️ Total Frames detectados: {frame_count}")
+                _log(f"   -> ⏱️ FPS detectados: {source_fps}")
+
+                # Escaneo de Rostros
+                if bbox_detector is not None or use_face_detector:
+                    _log(f"   -> 🤖 Iniciando escaneo de rostros (Umbral: {blur_threshold})...")
+                    if bbox_detector is not None:
+                        _log(f"   -> ⚡ Usando detector de rostros por GPU (YOLO/ONNX).")
+                    else:
+                        _log(f"   -> 🐢 Usando detector de rostros por CPU (OpenCV).")
+
+                    if HAS_OPENCV:
+                        cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+                        face_cascade = cv2.CascadeClassifier(cascade_path)
+
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0) # Volver al inicio
+
+                    _log(f"   -> 🤖 Iniciando escaneo de rostros por GPU...")
+
+                    # Silenciamos el logger de ultralytics antes de empezar
+                    logging.getLogger("ultralytics").setLevel(logging.ERROR)
+
+                    # Barra de progreso profesional (desc=Descripción, unit=unidad, leave=True para que no desaparezca)
+                    pbar = tqdm(total=frame_count, desc="🔍 Analizando Rostros", unit="frame", dynamic_ncols=True)
+                    comfy_pbar = comfy.utils.ProgressBar(frame_count)
+
+                    for idx in range(frame_count):
+                        ret, frame = cap.read()
+                        if not ret: break
+
+                        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                        variance = cv2.Laplacian(gray, cv2.CV_64F).var()
+
+                        faces_found = False
+                        if variance > blur_threshold:
+
+                            if bbox_detector is not None:
+                                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                                img_tensor = torch.from_numpy(frame_rgb.astype(np.float32) / 255.0).unsqueeze(0).cpu()
+
+                                try:
+                                    # 🤐 CÁPSULA DE VACÍO: Silenciamos TODO el ruido de la consola
+                                    with open(os.devnull, 'w') as fnull:
+                                        with redirect_stdout(fnull), redirect_stderr(fnull):
+                                            # Inferencia
+                                            res = bbox_detector.detect(img_tensor, 0.5, 10, 1.0, 10)
+                                            if isinstance(res, tuple):
+                                                segs = res[0]
+                                            else:
+                                                segs = res
+                                            if isinstance(segs, tuple) and len(segs) > 1 and isinstance(segs[1], list):
+                                                faces_found = len(segs[1]) > 0
+                                            elif isinstance(segs, list):
+                                                faces_found = len(segs) > 0
+                                            elif hasattr(segs, '__len__'):
+                                                faces_found = len(segs) > 0
+                                except Exception as e:
+                                    _log(f"      ❌ ERROR BBOX en frame {idx}: {e}")
+
+                            else:
+                                faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+                                faces_found = len(faces) > 0
+
+                        if faces_found:
+                            safe_faces.append(idx)
+                            # _log(f"      ✨ Rostro nítido detectado en frame [{idx}] (Varianza: {variance:.2f})")
+
+                        pbar.update(1)
+                        comfy_pbar.update(1)
+
+                    pbar.close()
+                    _log(f"   -> ✅ Encontrados {len(safe_faces)} frames válidos con rostros.")
+
+                cap.release()
+
+            # Guardar en caché
+            VIDEO_ANALYSIS_CACHE[cache_key] = (frame_count, source_fps, source_audio, safe_faces)
+
+        # --- EXTRACCIÓN DINÁMICA DEL FRAME DE REFERENCIA (Siempre se ejecuta) ---
+        ui_result = {}
+        if HAS_OPENCV:
+            cap = cv2.VideoCapture(video_path)
             safe_ref_idx = min(reference_frame_idx, max(0, frame_count - 1))
             cap.set(cv2.CAP_PROP_POS_FRAMES, safe_ref_idx)
-            ret, ref_frame = cap.read()
-
+            ret, frame = cap.read()
             if ret:
-                # Convertir BGR a RGB para ComfyUI
-                ref_frame_rgb = cv2.cvtColor(ref_frame, cv2.COLOR_BGR2RGB)
-                # Convertir a Tensor (1, H, W, 3)
+                ref_frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 ref_tensor = torch.from_numpy(ref_frame_rgb).float() / 255.0
                 ref_tensor = ref_tensor.unsqueeze(0)
                 _log(f"   -> 🖼️ Frame de referencia extraído (Índice: {safe_ref_idx})")
 
-                # Generar imagen temporal para el Preview de la UI
-                import random
                 from PIL import Image
                 preview_dir = folder_paths.get_temp_directory()
-                preview_name = f"preview_ref_{random.randint(1000, 9999)}.png"
+                preview_name = f"preview_ref_{uuid.uuid4().hex[:5]}.png"
                 Image.fromarray(ref_frame_rgb).save(os.path.join(preview_dir, preview_name))
                 ui_result = {"images": [{"filename": preview_name, "subfolder": "", "type": "temp"}]}
+            else:
+                ref_tensor = torch.zeros((1, 64, 64, 3), dtype=torch.float32)
+            cap.release()
+        else:
+            ref_tensor = torch.zeros((1, 64, 64, 3), dtype=torch.float32)
 
-            # Escaneo de Rostros
-            if bbox_detector is not None or use_face_detector:
-                _log(f"   -> 🤖 Iniciando escaneo de rostros (Umbral: {blur_threshold})...")
-                if bbox_detector is not None:
-                    _log(f"   -> ⚡ Usando detector de rostros por GPU (YOLO/ONNX).")
-                else:
-                    _log(f"   -> 🐢 Usando detector de rostros por CPU (OpenCV).")
+        # Liberar el detector de VRAM si se solicita y si se usó
+        if unload_detector_after_analysis and bbox_detector is not None and getattr(kwargs, 'unload_detector', True):
+            _log(f"   -> 🧹 Limpiando BBOX_DETECTOR de la VRAM para ahorrar memoria...")
+            import gc
+            import comfy.model_management as mm
+            # Romper referencias
+            del bbox_detector
+            bbox_detector = None
+            gc.collect()
+            torch.cuda.empty_cache()
+            mm.soft_empty_cache()
+        _log(f"{'='*50}\n")
 
-                if HAS_OPENCV:
-                    cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-                    face_cascade = cv2.CascadeClassifier(cascade_path)
+        return {"ui": ui_result, "result": (video_path, frame_count, source_fps, source_audio, safe_faces, ref_tensor, "\n".join(log_output))}
 
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0) # Volver al inicio
 
-                _log(f"   -> 🤖 Iniciando escaneo de rostros por GPU...")
+@register_node
+class VideoAnalyzerSceneDetector:
+    @classmethod
+    def INPUT_TYPES(cls):
+        input_dir = folder_paths.get_input_directory()
+        files = []
+        if os.path.exists(input_dir):
+            files = [f for f in os.listdir(input_dir) if f.split('.')[-1].lower() in ['webm', 'mp4', 'mkv', 'gif', 'mov']]
+        return {
+            "required": {
+                "video": (sorted(files), {"forceInput": False, "video_upload": True}),
+                "reference_frame_idx": ("INT", {"default": 0, "min": 0, "max": 100000}),
+                "scene_threshold": ("FLOAT", {"default": 25.0, "min": 5.0, "max": 150.0}),
+            },
+            "optional": {
+                "current_loop_index": ("INT", {"default": 0, "forceInput": True}),
+            }
+        }
 
-                # Silenciamos el logger de ultralytics antes de empezar
-                logging.getLogger("ultralytics").setLevel(logging.ERROR)
+    RETURN_TYPES = ("*", "INT", "FLOAT", "AUDIO", "FACE_CUTS", "IMAGE", "STRING")
+    RETURN_NAMES = ("video_path", "total_frames", "source_fps", "source_audio", "scene_cuts_list", "reference_frame", "log")
+    OUTPUT_NODE = True
+    FUNCTION = "analyze"
+    CATEGORY = "🔁 Sequential Batcher/Video"
 
-                # Barra de progreso profesional (desc=Descripción, unit=unidad, leave=True para que no desaparezca)
-                pbar = tqdm(total=frame_count, desc="🔍 Analizando Rostros", unit="frame", dynamic_ncols=True)
+    @classmethod
+    def IS_CHANGED(cls, video, reference_frame_idx, scene_threshold, **kwargs):
+        if isinstance(video, list):
+            video_str = "".join(video)
+        else:
+            video_str = str(video)
+        return f"{video_str}_{reference_frame_idx}_{scene_threshold}"
+
+    @classmethod
+    def VALIDATE_INPUTS(cls, **kwargs):
+        return True
+
+    def analyze(self, video, reference_frame_idx, scene_threshold, current_loop_index=0, **kwargs):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
+
+        video_path = video if os.path.exists(video) else folder_paths.get_annotated_filepath(video)
+        cache_key = f"{video_path}_scene"
+
+        # --- LÓGICA DE CACHÉ / RECUPERACIÓN ---
+        if current_loop_index > 0 and cache_key in VIDEO_ANALYSIS_CACHE:
+            _log(f"♻️ [Scene Detector] Ciclo {current_loop_index}: Recuperando análisis del caché.")
+            cached = VIDEO_ANALYSIS_CACHE[cache_key]
+            frame_count, source_fps, source_audio, scene_cuts = cached
+        else:
+            # Análisis completo (Solo Ciclo 0 o primer arranque)
+            _log(f"🎬 [Scene Detector] Ciclo {current_loop_index}: Iniciando análisis profundo...")
+
+            frame_count = 0
+            source_fps = 0.0
+            source_audio = None
+            scene_cuts = []
+
+            if HAS_OPENCV:
+                cap = cv2.VideoCapture(video_path)
+                frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                source_fps = float(cap.get(cv2.CAP_PROP_FPS))
+
+                # Extracción de Audio
+                try:
+                    waveform, sample_rate = torchaudio.load(video_path)
+                    source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
+                    _log(f"   -> 🎵 Audio extraído correctamente ({sample_rate}Hz)")
+                except Exception as e:
+                    source_audio = None
+                    _log(f"   -> ⚠️ Sin audio o error al extraer: {e}")
+
+                # Detección de cortes
+                _log(f"   -> 🎬 Iniciando escaneo de escenas (Umbral Diferencia: {scene_threshold})...")
+                prev_gray = None
+                pbar = tqdm(total=frame_count, desc="🎬 Analizando Escenas")
                 comfy_pbar = comfy.utils.ProgressBar(frame_count)
 
                 for idx in range(frame_count):
                     ret, frame = cap.read()
                     if not ret: break
-
-                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                    variance = cv2.Laplacian(gray, cv2.CV_64F).var()
-
-                    faces_found = False
-                    if variance > blur_threshold:
-
-                        if bbox_detector is not None:
-                            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                            img_tensor = torch.from_numpy(frame_rgb.astype(np.float32) / 255.0).unsqueeze(0).cpu()
-
-                            try:
-                                # 🤐 CÁPSULA DE VACÍO: Silenciamos TODO el ruido de la consola
-                                with open(os.devnull, 'w') as fnull:
-                                    with redirect_stdout(fnull), redirect_stderr(fnull):
-                                        # Inferencia
-                                        segs = bbox_detector.detect(img_tensor, 0.5, 0, 1.0, 10)
-
-                                if segs is not None:
-                                    # Formato ImpactPack: (shape, [lista_de_segs])
-                                    if isinstance(segs, tuple) and len(segs) == 2 and isinstance(segs[1], list):
-                                        if len(segs[1]) > 0:
-                                            faces_found = True
-                                    # Otros formatos directos
-                                    elif isinstance(segs, list) and len(segs) > 0:
-                                        faces_found = True
-                            except Exception:
-                                pass # Fallback silencioso si el detector falla
-
-                        elif HAS_OPENCV and use_face_detector:
-                            # Fallback silencioso a OpenCV si el usuario no conectó el cable ONNX
-                            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-                            if len(faces) > 0:
-                                faces_found = True
-
-                        if faces_found:
-                            safe_faces.append(idx)
-
-                    # Actualizamos la barra una sola vez por frame
+                    small = cv2.resize(frame, (128, 128))
+                    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+                    if prev_gray is not None:
+                        score = np.mean(cv2.absdiff(gray, prev_gray))
+                        if score > scene_threshold:
+                            scene_cuts.append(idx)
+                            # _log(f"      🎞️ Corte de escena detectado en frame [{idx}] (Puntuación: {score:.2f})")
+                    prev_gray = gray
                     pbar.update(1)
                     comfy_pbar.update(1)
-
-                pbar.close() # Cerramos la barra al terminar
-                _log(f"   -> ✅ Encontrados {len(safe_faces)} frames nítidos con rostros.")
-
-                # Descarga de VRAM
-                if unload_detector_after_analysis:
-                    _log(f"   -> 🧹 Descargando detector de rostros de la VRAM...")
-                    import gc
-                    import comfy.model_management as mm
-                    mm.unload_all_models()
-                    gc.collect()
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
+                pbar.close()
+                cap.release()
+                _log(f"   -> ✅ Encontrados {len(scene_cuts)} cambios de escena fuertes.")
             else:
-                _log(f"   -> 🤖 Escaneo de rostros DESACTIVADO.")
+                _log("   -> ❌ ERROR: OpenCV no está instalado. Ejecuta: pip install opencv-python")
 
+            # Guardar en caché
+            VIDEO_ANALYSIS_CACHE[cache_key] = (frame_count, source_fps, source_audio, scene_cuts)
+
+        # --- EXTRACCIÓN DINÁMICA DEL FRAME DE REFERENCIA (Siempre se ejecuta) ---
+        ui_result = {}
+        if HAS_OPENCV:
+            cap = cv2.VideoCapture(video_path)
+            safe_ref_idx = min(reference_frame_idx, max(0, frame_count - 1)) if frame_count > 0 else 0
+            cap.set(cv2.CAP_PROP_POS_FRAMES, safe_ref_idx)
+            ret, frame = cap.read()
+            if ret:
+                ref_frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                ref_tensor = torch.from_numpy(ref_frame_rgb).float() / 255.0
+                ref_tensor = ref_tensor.unsqueeze(0)
+
+                from PIL import Image
+                preview_name = f"preview_scene_{uuid.uuid4().hex[:5]}.png"
+                Image.fromarray(ref_frame_rgb).save(os.path.join(folder_paths.get_temp_directory(), preview_name))
+                ui_result = {"images": [{"filename": preview_name, "subfolder": "", "type": "temp"}]}
+            else:
+                ref_tensor = torch.zeros((1, 64, 64, 3))
             cap.release()
-
-        # Auto-limpieza del detector para liberar VRAM inmediatamente
-        if kwargs.get("unload_detector", True):
-            _log("   -> 🧹 Descargando modelo del detector de rostros de la VRAM...")
-            if bbox_detector is not None:
-                del bbox_detector
-            if HAS_OPENCV and 'face_cascade' in locals():
-                del face_cascade
-            import gc
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+        else:
+            ref_tensor = torch.zeros((1, 64, 64, 3))
 
         _log(f"{'='*50}\n")
+        return {"ui": ui_result, "result": (video_path, frame_count, source_fps, source_audio, scene_cuts, ref_tensor, "\n".join(log_output))}
 
-        # 💡 EL BYPASS A VHS: Pasamos video_path (Ruta Absoluta) en lugar de video_name
-        return {"ui": ui_result, "result": (video_path, frame_count, source_fps, source_audio, safe_faces, ref_tensor, "\n".join(log_output))}
+
 
 @register_node
 class AutoLoopCalculator:
