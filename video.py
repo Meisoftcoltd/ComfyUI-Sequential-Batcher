@@ -11,6 +11,7 @@ import folder_paths
 import nodes
 import time
 import uuid
+import subprocess
 from . import register_node
 
 # Aseguramos que torch esté disponible globalmente para los bloques de limpieza
@@ -47,6 +48,63 @@ def extract_and_standardize_audio(video_path, target_sr=44100):
     except Exception as e:
         raise e
 
+# 🎬 Helper para crear un Clon de Vídeo Físico Estandarizado (Soluciona el desvío VHS)
+def standardize_video_file(video_path, _log):
+    import folder_paths
+
+    if "_std_audio.mp4" in video_path:
+        return video_path
+
+    filename = os.path.basename(video_path)
+    name, _ = os.path.splitext(filename)
+    out_filename = f"{name}_std_audio.mp4"
+    out_path = os.path.join(folder_paths.get_temp_directory(), out_filename)
+
+    if os.path.exists(out_path):
+        _log(f"   -> ♻️ Usando clon de vídeo estandarizado existente en disco: {out_filename}")
+        return out_path
+
+    # Averiguar info original del audio
+    target_sr = None
+    target_ac = None
+    try:
+        info = torchaudio.info(video_path)
+        # Solo aplicamos limitador si se superan los umbrales máximos de ComfyUI
+        if info.sample_rate > 44100:
+            target_sr = "44100"
+        if info.num_channels > 2:
+            target_ac = "2"
+    except Exception as e:
+        _log(f"   -> ⚠️ No se pudo leer metadata de audio con torchaudio. Forzando límites de seguridad. (Error: {e})")
+        target_sr = "44100"
+        target_ac = "2"
+
+    # Si el audio ya es seguro, no gastamos recursos en clonar
+    if target_sr is None and target_ac is None:
+        _log(f"   -> ✅ El audio original ya está en parámetros seguros (<=44100Hz, <=2 Canales). Omitiendo FFmpeg.")
+        return video_path
+
+    _log(f"   -> ⚙️ Reestructurando contenedor físico con FFmpeg (Vídeo: Copy | Audio: Limitando a parámetros seguros)...")
+    try:
+        cmd = [
+            "ffmpeg", "-y", "-i", video_path,
+            "-c:v", "copy",
+            "-c:a", "aac"
+        ]
+
+        # Añadimos los filtros solo si son necesarios
+        if target_sr:
+            cmd.extend(["-ar", target_sr])
+        if target_ac:
+            cmd.extend(["-ac", target_ac])
+
+        cmd.extend(["-map", "0:v?", "-map", "0:a?", out_path])
+
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        _log(f"   -> ✅ Contenedor clonado y blindado con éxito para los nodos de VHS.")
+        return out_path
+    except Exception as e:
+        raise Exception(f"❌ [Secuencial Batcher] Error crítico: Falló la reestructuración del vídeo. Asegúrate de tener FFmpeg instalado y accesible en el PATH del sistema. Detalles: {e}")
 
 try:
     import cv2
@@ -115,6 +173,9 @@ class VideoAnalyzerFaceDetector:
             video_path = video
         else:
             video_path = folder_paths.get_annotated_filepath(video)
+
+        # 🚀 CLONACIÓN FÍSICA PARA VHS
+        video_path = standardize_video_file(video_path, _log)
 
         _log(f"\n{'='*50}")
         _log(f"🕵️ [Secuencial Batcher] NODO: Video Analyzer (Explorador)")
@@ -311,6 +372,10 @@ class VideoAnalyzerSceneDetector:
             log_output.append(str(msg))
 
         video_path = video if os.path.exists(video) else folder_paths.get_annotated_filepath(video)
+
+        # 🚀 CLONACIÓN FÍSICA PARA VHS
+        video_path = standardize_video_file(video_path, _log)
+
         cache_key = f"{video_path}_scene"
 
         # --- LÓGICA DE CACHÉ / RECUPERACIÓN ---
