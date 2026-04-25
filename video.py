@@ -260,7 +260,7 @@ class VideoAnalyzerSceneDetector:
             }
         }
 
-    RETURN_TYPES = ("*", "INT", "FLOAT", "AUDIO", "FACE_CUTS", "IMAGE", "STRING")
+    RETURN_TYPES = ("*", "INT", "FLOAT", "AUDIO", "SCENE_CUTS", "IMAGE", "STRING")
     RETURN_NAMES = ("video_path", "total_frames", "source_fps", "source_audio", "scene_cuts_list", "reference_frame", "log")
     OUTPUT_NODE = True
     FUNCTION = "analyze"
@@ -383,6 +383,7 @@ class AutoLoopCalculator:
             },
             "optional": {
                 "safe_faces_list": ("FACE_CUTS", {"forceInput": True}),
+                "scene_cuts_list": ("SCENE_CUTS", {"forceInput": True}),
             }
         }
 
@@ -391,7 +392,7 @@ class AutoLoopCalculator:
     FUNCTION = "calculate"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
-    def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index, safe_faces_list=None):
+    def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index, safe_faces_list=None, scene_cuts_list=None):
         log_output = []
         def _log(msg):
             print(msg)
@@ -443,14 +444,34 @@ class AutoLoopCalculator:
             best_cut = safe_source_frame_count
             _log(f"   -> 🧮 Absorbiendo resto final: meta fijada en frame {best_cut}")
         else:
-            best_cut = ideal_cut
-            if safe_faces_list and len(safe_faces_list) > 0:
-                # Find the safe face closest to the equitable target
+            if scene_cuts_list and len(scene_cuts_list) > 0:
+                # 🎬 LÓGICA DE ESCENAS ESTRICTA (1 Escena = 1 Bucle)
+                # Buscar el PRIMER corte que venga inmediatamente después de la posición actual
+                future_cuts = [c for c in scene_cuts_list if c > current_pos]
+
+                if future_cuts:
+                    next_cut = min(future_cuts)
+
+                    # Verificamos si esta escena entera cabe en la VRAM
+                    if next_cut <= ideal_cut:
+                        best_cut = next_cut
+                        _log(f"   -> 🎬 Bucle aislado por escena. Cortando exacto en el frame: {best_cut}")
+                    else:
+                        best_cut = ideal_cut
+                        _log(f"   -> ⚠️ Toma demasiado larga para la VRAM. Cortando por límite técnico en: {best_cut} (El plano real acaba en {next_cut})")
+                else:
+                    best_cut = ideal_cut
+                    _log(f"   -> 🎬 No quedan cortes de cámara por delante. Forzando corte final por VRAM en: {ideal_cut}")
+
+            elif safe_faces_list and len(safe_faces_list) > 0:
+                # 👤 LÓGICA DE ROSTROS (Fallback si no hay escenas conectadas)
                 closest_face = min(safe_faces_list, key=lambda x: abs(x - ideal_cut))
                 best_cut = closest_face
-                _log(f"   -> ✂️ Corte Inteligente proyectado: {best_cut} (Meta equitativa: {ideal_cut})")
+                _log(f"   -> ✂️ Corte Facial Inteligente: {best_cut} (Meta: {ideal_cut})")
+
             else:
-                _log(f"   -> ⚖️ Sin caras detectadas. Forzando corte equitativo: {ideal_cut}")
+                best_cut = ideal_cut
+                _log(f"   -> ⚖️ Sin detectores conectados. Forzando corte equitativo: {ideal_cut}")
 
         effective_chunk_frames = math.ceil((best_cut - current_pos) / select_every_nth)
         if current_pos + (effective_chunk_frames * select_every_nth) > safe_source_frame_count:
@@ -570,6 +591,7 @@ class AutoLoopCalculatorWan:
             },
             "optional": {
                 "safe_faces_list": ("FACE_CUTS", {"forceInput": True}),
+                "scene_cuts_list": ("SCENE_CUTS", {"forceInput": True}),
             }
         }
 
@@ -578,7 +600,7 @@ class AutoLoopCalculatorWan:
     FUNCTION = "calculate"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
-    def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index, safe_faces_list=None):
+    def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index, safe_faces_list=None, scene_cuts_list=None):
         log_output = []
         def _log(msg):
             print(msg)
@@ -637,17 +659,33 @@ class AutoLoopCalculatorWan:
             best_cut = physical_source_frame_count
             _log(f"   -> 🧮 Absorbiendo resto final seguro: meta fijada en frame {best_cut}")
         else:
-            best_cut = ideal_cut
-            if safe_faces_list and len(safe_faces_list) > 0:
+            if scene_cuts_list and len(scene_cuts_list) > 0:
+                future_cuts = [c for c in scene_cuts_list if c > current_pos]
+                if future_cuts:
+                    next_cut = min(future_cuts)
+                    if next_cut <= ideal_cut:
+                        chunk_from_scene = math.ceil((next_cut - current_pos) / select_every_nth)
+                        safe_chunk_from_scene = (chunk_from_scene // 4) * 4
+                        if safe_chunk_from_scene < 4: safe_chunk_from_scene = 4
+                        best_cut = current_pos + (safe_chunk_from_scene * select_every_nth)
+                        _log(f"   -> 🎬 Bucle aislado por escena (Ajustado x4). Cortando en el frame: {best_cut} (Corte real: {next_cut})")
+                    else:
+                        best_cut = ideal_cut
+                        _log(f"   -> ⚠️ Toma demasiado larga para la VRAM. Cortando por límite técnico en: {best_cut} (El plano real acaba en {next_cut})")
+                else:
+                    best_cut = ideal_cut
+                    _log(f"   -> 🎬 No quedan cortes de cámara por delante. Forzando corte final por VRAM en: {ideal_cut}")
+            elif safe_faces_list and len(safe_faces_list) > 0:
                 closest_face = min(safe_faces_list, key=lambda x: abs(x - ideal_cut))
                 chunk_from_face = math.ceil((closest_face - current_pos) / select_every_nth)
                 safe_chunk_from_face = (chunk_from_face // 4) * 4
                 if safe_chunk_from_face < 4: safe_chunk_from_face = 4
 
                 best_cut = current_pos + (safe_chunk_from_face * select_every_nth)
-                _log(f"   -> ✂️ Corte Inteligente (Ajustado x4): {best_cut} (Cara original detectada: {closest_face})")
+                _log(f"   -> ✂️ Corte Facial Inteligente (Ajustado x4): {best_cut} (Cara original detectada: {closest_face})")
             else:
-                _log(f"   -> ⚖️ Sin caras. Forzando corte equitativo x4: {ideal_cut}")
+                best_cut = ideal_cut
+                _log(f"   -> ⚖️ Sin detectores conectados. Forzando corte equitativo x4: {ideal_cut}")
 
         # 4. Cálculo final del chunk consolidado a regla 4n+1
         effective_chunk_frames = math.ceil((best_cut - current_pos) / select_every_nth)
