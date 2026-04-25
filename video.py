@@ -21,6 +21,33 @@ import torch
 # Caché persistente para evitar re-escaneos pesados de vídeo
 VIDEO_ANALYSIS_CACHE = {}
 
+# 🎵 Helper para estandarizar audio a 44100Hz y 2 Canales (Estéreo)
+def extract_and_standardize_audio(video_path, target_sr=44100):
+    import torchaudio.transforms as T
+    try:
+        waveform, sample_rate = torchaudio.load(video_path)
+
+        # 1. Resampling si la frecuencia es distinta
+        if sample_rate != target_sr:
+            resampler = T.Resample(orig_freq=sample_rate, new_freq=target_sr)
+            waveform = resampler(waveform)
+            sample_rate = target_sr
+
+        # 2. Downmix / Upmix a Estéreo (2 canales) estrictamente
+        channels = waveform.shape[0]
+        if channels > 2:
+            # Si tiene más de 2 canales (ej. 5.1), mezclamos a mono y duplicamos a estéreo
+            mono = torch.mean(waveform, dim=0, keepdim=True)
+            waveform = mono.repeat(2, 1)
+        elif channels == 1:
+            # Si es mono, duplicamos la pista para que sea estéreo
+            waveform = waveform.repeat(2, 1)
+
+        return {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
+    except Exception as e:
+        raise e
+
+
 try:
     import cv2
     import numpy as np
@@ -103,12 +130,11 @@ class VideoAnalyzerFaceDetector:
         else:
             # Análisis completo (Solo Ciclo 0 o primer arranque)
             _log(f"🎬 [Face Detector] Ciclo {current_loop_index}: Iniciando análisis profundo...")
-            # 1. Extracción de Audio Íntegro
+            # 1. Extracción de Audio Íntegro (Estandarizado a 44100Hz Estéreo)
             source_audio = None
             try:
-                waveform, sample_rate = torchaudio.load(video_path)
-                source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
-                _log(f"   -> 🎵 Audio extraído correctamente ({sample_rate}Hz)")
+                source_audio = extract_and_standardize_audio(video_path)
+                _log(f"   -> 🎵 Audio extraído y estandarizado correctamente (44100Hz, Estéreo)")
             except Exception as e:
                 _log(f"   -> ⚠️ Sin audio o error al extraer: {e}")
 
@@ -306,13 +332,12 @@ class VideoAnalyzerSceneDetector:
                 frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 source_fps = float(cap.get(cv2.CAP_PROP_FPS))
 
-                # Extracción de Audio
+                # 1. Extracción de Audio Íntegro (Estandarizado a 44100Hz Estéreo)
+                source_audio = None
                 try:
-                    waveform, sample_rate = torchaudio.load(video_path)
-                    source_audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
-                    _log(f"   -> 🎵 Audio extraído correctamente ({sample_rate}Hz)")
+                    source_audio = extract_and_standardize_audio(video_path)
+                    _log(f"   -> 🎵 Audio extraído y estandarizado correctamente (44100Hz, Estéreo)")
                 except Exception as e:
-                    source_audio = None
                     _log(f"   -> ⚠️ Sin audio o error al extraer: {e}")
 
                 # Detección de cortes
