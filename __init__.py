@@ -31,6 +31,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "AutoLoopCalculator": "📊 Auto Loop Calculator",
     "AutoLoopCalculatorWan": "📊 Auto Loop Calculator (WanVideo 3dVAE)",
     "AutoLoopCalculatorLTX": "📊 Auto Loop Calculator (LTX 2.3)",
+    "AutoLoopCalculatorTTS": "📊 Auto Loop Calculator (TTS/Texto)",
     "SequentialLoopStart": "🏁 Loop Start (Index)",
     "SequentialLoopTrigger": "🚀 Loop Trigger (Auto-Queue)",
     # Tools

@@ -575,6 +575,57 @@ class AutoLoopCalculator:
         return (effective_chunk_frames, skip_frames, select_every_nth, "\n".join(log_output))
 
 @register_node
+class AutoLoopCalculatorTTS:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "text": ("STRING", {"multiline": True, "dynamicPrompts": False}),
+                "current_loop_index": ("INT", {"forceInput": True}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "INT", "INT", "STRING")
+    RETURN_NAMES = ("current_paragraph", "current_index", "total_paragraphs", "log")
+    FUNCTION = "calculate"
+    CATEGORY = "🔁 Sequential Batcher/Text"
+
+    def calculate(self, text, current_loop_index):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
+
+        from . import loop
+
+        # 1. Limpiar y separar párrafos ignorando saltos de línea vacíos
+        raw_paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
+        total_paragraphs = len(raw_paragraphs)
+
+        if total_paragraphs == 0:
+            raw_paragraphs = [""]
+            total_paragraphs = 1
+
+        # 2. Seguridad de índice
+        safe_index = min(current_loop_index, total_paragraphs - 1)
+        current_paragraph = raw_paragraphs[safe_index]
+
+        # 3. 🧠 HACK CORE: Inyectamos los párrafos como si fueran frames
+        # para que el SequentialLoopTrigger entienda el progreso.
+        loop.global_source_frame_count = total_paragraphs
+        loop.global_accumulated_frames = safe_index + 1
+        loop.global_is_final_chunk = (safe_index + 1) >= total_paragraphs
+
+        _log(f"\n{'='*50}")
+        _log(f"🗣️ [Secuencial Batcher] NODO: Auto Loop Calculator (TTS)")
+        _log(f"   -> Párrafos detectados: {total_paragraphs}")
+        _log(f"   -> Timeline: Párrafo {safe_index + 1} de {total_paragraphs}")
+        _log(f"   -> 📜 Texto a procesar: {current_paragraph[:75]}...")
+        _log(f"{'='*50}\n")
+
+        return (current_paragraph, safe_index, total_paragraphs, "\n".join(log_output))
+
+@register_node
 class IncrementalVideoStitcher:
     @classmethod
     def INPUT_TYPES(s):
@@ -591,7 +642,6 @@ class IncrementalVideoStitcher:
     FUNCTION = "stitch"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
-    # 🚀 EVITA QUE COMFYUI IGNORE EL NODO USANDO CACHÉ
     @classmethod
     def IS_CHANGED(cls, **kwargs):
         import time
@@ -620,7 +670,7 @@ class IncrementalVideoStitcher:
 
         timestamp = int(time.time() * 1000)
 
-        # 🚀 FIX OOM RAM: Guardar frames individualmente como PNG (Ultra Ligero)
+        # 🖼️ GUARDAR IMÁGENES (PNG)
         _log(f"📦 [Stitcher] Guardando {images.shape[0]} frames como PNGs de alta calidad...")
         for i in range(images.shape[0]):
             filename = f"frame_{current_loop_index:04d}_{timestamp}_{i:04d}.png"
@@ -629,30 +679,53 @@ class IncrementalVideoStitcher:
             img = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
             img.save(path, format="PNG")
 
+        # 🎵 GUARDAR AUDIO EN CACHÉ (.pt)
+        if audio is not None:
+            audio_path = os.path.join(cache_dir, f"audio_{current_loop_index:04d}_{timestamp}.pt")
+            torch.save(audio, audio_path)
+
         source_total = getattr(loop, 'global_source_frame_count', 1)
         is_final_chunk = getattr(loop, 'global_is_final_chunk', False)
 
         if is_final_chunk or loop.global_accumulated_frames >= source_total:
-            _log(f"   -> 🏁 ¡Último ciclo detectado! Ensamblando PNGs desde la caché temporal...")
+            _log(f"   -> 🏁 ¡Último ciclo detectado! Ensamblando recursos desde la caché temporal...")
 
+            # 1. ENSAMBLAR VÍDEO
             png_files = sorted([f for f in os.listdir(cache_dir) if f.endswith('.png')])
-
             if not png_files:
                 _log("   -> ❌ ERROR: No se encontraron frames en la subcarpeta.")
                 return (images, audio, True, "\n".join(log_output))
 
-            # 🚀 OPTIMIZACIÓN EXTREMA DE RAM: Pre-asignamos el tensor en lugar de usar torch.cat
             first_img = Image.open(os.path.join(cache_dir, png_files[0]))
             H, W = first_img.height, first_img.width
             total_frames = len(png_files)
 
-            _log(f"   -> 🧩 Reservando bloque continuo en RAM para {total_frames} frames...")
+            _log(f"   -> 🧩 Reservando bloque en RAM para {total_frames} frames de vídeo...")
             final_tensor = torch.empty((total_frames, H, W, 3), dtype=torch.float32, device="cpu")
 
             for i, f in enumerate(png_files):
                 img = Image.open(os.path.join(cache_dir, f)).convert("RGB")
                 img_np = np.array(img).astype(np.float32) / 255.0
                 final_tensor[i] = torch.from_numpy(img_np)
+
+            # 2. ENSAMBLAR AUDIO
+            audio_files = sorted([f for f in os.listdir(cache_dir) if f.startswith('audio_') and f.endswith('.pt')])
+            final_audio = None
+            if audio_files:
+                _log(f"   -> 🎵 Ensamblando {len(audio_files)} fragmentos de audio...")
+                waveforms = []
+                sample_rate = 44100
+                for af in audio_files:
+                    chunk_audio = torch.load(os.path.join(cache_dir, af))
+                    waveforms.append(chunk_audio["waveform"])
+                    sample_rate = chunk_audio["sample_rate"]
+
+                # Concatenamos los audios en el eje del tiempo (dimensión -1)
+                final_waveform = torch.cat(waveforms, dim=-1)
+                final_audio = {"waveform": final_waveform, "sample_rate": sample_rate}
+                _log(f"   -> ✅ Audio unificado. Duración total: {final_waveform.shape[-1] / sample_rate:.2f} segundos.")
+            else:
+                final_audio = audio
 
             _log(f"✅ [Stitcher] VÍDEO COMPLETADO: {final_tensor.shape[0]} frames ensamblados con éxito.")
 
@@ -662,9 +735,9 @@ class IncrementalVideoStitcher:
             except:
                 pass
 
-            return (final_tensor, audio, True, "\n".join(log_output))
+            return (final_tensor, final_audio, True, "\n".join(log_output))
         else:
-            _log(f"   -> ⏳ Ciclo intermedio. Frames PNG almacenados de forma segura. Pasando 1 frame dummy...")
+            _log(f"   -> ⏳ Ciclo intermedio. Recursos almacenados de forma segura. Pasando frames dummy...")
             dummy_frame = images[-1:].clone()
             return (dummy_frame, None, False, "\n".join(log_output))
 
