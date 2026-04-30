@@ -21,7 +21,8 @@ def check_and_install_ffmpeg():
         if sys.platform.startswith("linux"):
             try:
                 print("⚙️ Intentando instalar FFmpeg automáticamente (Linux/WSL)...")
-                subprocess.check_call("sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ffmpeg", shell=True)
+                subprocess.check_call(["sudo", "apt-get", "update"])
+                subprocess.check_call(["sudo", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", "ffmpeg"])
                 print("✅ FFmpeg instalado correctamente.")
             except Exception as e:
                 print(f"❌ Falló la instalación automática de FFmpeg: {e}")
