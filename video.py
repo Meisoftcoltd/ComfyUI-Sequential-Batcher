@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout, redirect_stderr
 from tqdm import tqdm
 import comfy.utils
@@ -584,10 +585,13 @@ class IncrementalVideoStitcher:
             _log(f"   -> 🧩 Reservando bloque continuo en RAM para {total_frames} frames...")
             final_tensor = torch.empty((total_frames, H, W, 3), dtype=torch.float32, device="cpu")
 
-            for i, f in enumerate(png_files):
-                img = Image.open(os.path.join(cache_dir, f)).convert("RGB")
+            def load_and_process(idx, filename):
+                img = Image.open(os.path.join(cache_dir, filename)).convert("RGB")
                 img_np = np.array(img).astype(np.float32) / 255.0
-                final_tensor[i] = torch.from_numpy(img_np)
+                final_tensor[idx] = torch.from_numpy(img_np)
+
+            with ThreadPoolExecutor() as executor:
+                list(executor.map(lambda p: load_and_process(*p), enumerate(png_files)))
 
             _log(f"✅ [Stitcher] VÍDEO COMPLETADO: {final_tensor.shape[0]} frames ensamblados con éxito.")
 
