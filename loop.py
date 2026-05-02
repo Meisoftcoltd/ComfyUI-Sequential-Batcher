@@ -233,17 +233,17 @@ class SequentialLoopTrigger:
             if prompt is not None:
                 # 🧠 HACKER MODE: Estimamos si el ciclo que vamos a encolar es el final
                 estimated_chunk = 50
-                for node_id, node_data in prompt.items():
-                    if "AutoLoopCalculator" in node_data.get("class_type", ""):
-                        # Rescata el chunk estimado del calculador en uso
-                        estimated_chunk = node_data.get("inputs", {}).get("target_frames_per_loop", 50)
-                        break
-
-                is_next_final = (global_accumulated_frames + estimated_chunk) >= global_source_frame_count
-
+                found_calculator = False
                 m_seeds = 0
+                master_switches = []
+
                 for node_id, node_data in prompt.items():
+                    class_type = node_data.get("class_type", "")
                     inputs = node_data.get("inputs", {})
+
+                    if not found_calculator and "AutoLoopCalculator" in class_type:
+                        estimated_chunk = inputs.get("target_frames_per_loop", 50)
+                        found_calculator = True
 
                     # Mutación de semillas
                     for key in ["seed", "noise_seed"]:
@@ -252,24 +252,29 @@ class SequentialLoopTrigger:
                             m_seeds += 1
 
                     # Mutación de índice
-                    if node_data.get("class_type") == "SequentialLoopStart":
+                    if class_type == "SequentialLoopStart":
                         inputs["loop_idx"] = next_loop
                         inputs["reset_loop"] = False
 
-                    # 🔪 CIRUGÍA DE GRAFO EN CALIENTE
-                    if node_data.get("class_type") == "MasterSwitch":
-                        print(f"   -> 🔀 [Cirugía de Grafo] Mutando Master Switch para Ciclo {next_loop}...")
-                        # Sobrescribimos el cable que viene del Stitcher por un booleano estático
-                        inputs["is_final_cycle"] = is_next_final
+                    # 🔪 Recolectamos Master Switch para cirugía diferida
+                    if class_type == "MasterSwitch":
+                        master_switches.append(inputs)
 
-                        if is_next_final:
-                            if "on_false" in inputs:
-                                del inputs["on_false"]
-                                print(f"      ✂️ Cable 'on_false' eliminado (Ahorro de VRAM en ruta inactiva).")
-                        else:
-                            if "on_true" in inputs:
-                                del inputs["on_true"]
-                                print(f"      ✂️ Cable 'on_true' eliminado (Ruta pesada desconectada).")
+                is_next_final = (global_accumulated_frames + estimated_chunk) >= global_source_frame_count
+
+                for inputs in master_switches:
+                    print(f"   -> 🔀 [Cirugía de Grafo] Mutando Master Switch para Ciclo {next_loop}...")
+                    # Sobrescribimos el cable que viene del Stitcher por un booleano estático
+                    inputs["is_final_cycle"] = is_next_final
+
+                    if is_next_final:
+                        if "on_false" in inputs:
+                            del inputs["on_false"]
+                            print(f"      ✂️ Cable 'on_false' eliminado (Ahorro de VRAM en ruta inactiva).")
+                    else:
+                        if "on_true" in inputs:
+                            del inputs["on_true"]
+                            print(f"      ✂️ Cable 'on_true' eliminado (Ruta pesada desconectada).")
 
                 print(f"   -> 🎲 Semillas mutadas: {m_seeds}")
 
