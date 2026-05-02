@@ -1,5 +1,4 @@
 import os
-import sys
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout, redirect_stderr
@@ -9,14 +8,10 @@ import math
 import torch
 import torchaudio
 import folder_paths
-import nodes
 import time
 import uuid
 import subprocess
 from . import register_node
-
-# Aseguramos que torch esté disponible globalmente para los bloques de limpieza
-import torch
 
 # Intento de carga de OpenCV para el Director de Fotografía
 
