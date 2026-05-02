@@ -577,16 +577,17 @@ class AutoLoopCalculatorTTS:
         return {
             "required": {
                 "text": ("STRING", {"multiline": True, "dynamicPrompts": False}),
+                "split_mode": (["Párrafos (Saltos de línea)", "Frases (Puntos)"], {"default": "Párrafos (Saltos de línea)"}),
                 "current_loop_index": ("INT", {"forceInput": True}),
             }
         }
 
     RETURN_TYPES = ("STRING", "INT", "INT", "STRING")
-    RETURN_NAMES = ("current_paragraph", "current_index", "total_paragraphs", "log")
+    RETURN_NAMES = ("current_text", "current_index", "total_chunks", "log")
     FUNCTION = "calculate"
     CATEGORY = "🔁 Sequential Batcher/Text"
 
-    def calculate(self, text, current_loop_index):
+    def calculate(self, text, split_mode, current_loop_index):
         log_output = []
         def _log(msg):
             print(msg)
@@ -594,32 +595,40 @@ class AutoLoopCalculatorTTS:
 
         from . import loop
 
-        # 1. Limpiar y separar párrafos ignorando saltos de línea vacíos
-        raw_paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
-        total_paragraphs = len(raw_paragraphs)
+        # 1. Separar el texto según el modo elegido
+        if split_mode == "Frases (Puntos)":
+            # Dividimos por punto, eliminamos vacíos y restauramos el punto final
+            raw_chunks = [p.strip() + "." for p in text.split('.') if p.strip()]
+            chunk_type_name = "Frases"
+        else:
+            # Comportamiento original: Dividir por párrafos (saltos de línea)
+            raw_chunks = [p.strip() for p in text.split('\n') if p.strip()]
+            chunk_type_name = "Párrafos"
 
-        if total_paragraphs == 0:
-            raw_paragraphs = [""]
-            total_paragraphs = 1
+        total_chunks = len(raw_chunks)
+
+        if total_chunks == 0:
+            raw_chunks = [""]
+            total_chunks = 1
 
         # 2. Seguridad de índice
-        safe_index = min(current_loop_index, total_paragraphs - 1)
-        current_paragraph = raw_paragraphs[safe_index]
+        safe_index = min(current_loop_index, total_chunks - 1)
+        current_text = raw_chunks[safe_index]
 
-        # 3. 🧠 HACK CORE: Inyectamos los párrafos como si fueran frames
-        # para que el SequentialLoopTrigger entienda el progreso.
-        loop.global_source_frame_count = total_paragraphs
+        # 3. 🧠 HACK CORE: Inyectamos los bloques como si fueran frames
+        loop.global_source_frame_count = total_chunks
         loop.global_accumulated_frames = safe_index + 1
-        loop.global_is_final_chunk = (safe_index + 1) >= total_paragraphs
+        loop.global_is_final_chunk = (safe_index + 1) >= total_chunks
 
         _log(f"\n{'='*50}")
         _log(f"🗣️ [Secuencial Batcher] NODO: Auto Loop Calculator (TTS)")
-        _log(f"   -> Párrafos detectados: {total_paragraphs}")
-        _log(f"   -> Timeline: Párrafo {safe_index + 1} de {total_paragraphs}")
-        _log(f"   -> 📜 Texto a procesar: {current_paragraph[:75]}...")
+        _log(f"   -> Modo de división: {split_mode}")
+        _log(f"   -> {chunk_type_name} detectados: {total_chunks}")
+        _log(f"   -> Timeline: Bloque {safe_index + 1} de {total_chunks}")
+        _log(f"   -> 📜 Texto a procesar: {current_text[:75]}...")
         _log(f"{'='*50}\n")
 
-        return (current_paragraph, safe_index, total_paragraphs, "\n".join(log_output))
+        return (current_text, safe_index, total_chunks, "\n".join(log_output))
 
 @register_node
 class IncrementalVideoStitcher:
