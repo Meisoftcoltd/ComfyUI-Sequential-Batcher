@@ -724,7 +724,7 @@ class IncrementalVideoStitcher:
                 waveforms = []
                 sample_rate = 44100
                 for af in audio_files:
-                    chunk_audio = torch.load(os.path.join(cache_dir, af))
+                    chunk_audio = torch.load(os.path.join(cache_dir, af), weights_only=True)
                     waveforms.append(chunk_audio["waveform"])
                     sample_rate = chunk_audio["sample_rate"]
 
