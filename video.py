@@ -661,6 +661,7 @@ class IncrementalVideoStitcher:
         import os, folder_paths, torch, shutil, time
         from PIL import Image
         import numpy as np
+        from concurrent.futures import ThreadPoolExecutor
 
         cache_dir = os.path.join(folder_paths.get_temp_directory(), "meisoft_video_cache")
 
@@ -701,20 +702,21 @@ class IncrementalVideoStitcher:
                 _log("   -> ❌ ERROR: No se encontraron frames en la subcarpeta.")
                 return (images, audio, True, "\n".join(log_output))
 
-            first_img = Image.open(os.path.join(cache_dir, png_files[0]))
-            H, W = first_img.height, first_img.width
             total_frames = len(png_files)
+            _log(f"   -> 🧩 Extrayendo {total_frames} frames en paralelo...")
 
-            _log(f"   -> 🧩 Reservando bloque en RAM para {total_frames} frames de vídeo...")
-            final_tensor = torch.empty((total_frames, H, W, 3), dtype=torch.float32, device="cpu")
-
-            def load_and_process(idx, filename):
+            # Función pura que devuelve el tensor directamente (Sin in-place updates)
+            def load_and_process(filename):
                 img = Image.open(os.path.join(cache_dir, filename)).convert("RGB")
                 img_np = np.array(img).astype(np.float32) / 255.0
-                final_tensor[idx] = torch.from_numpy(img_np)
+                return torch.from_numpy(img_np).unsqueeze(0) # Añadimos batch dimension
 
+            # Usamos map para garantizar el orden secuencial de los resultados
             with ThreadPoolExecutor() as executor:
-                list(executor.map(lambda p: load_and_process(*p), enumerate(png_files)))
+                tensors_list = list(executor.map(load_and_process, png_files))
+
+            # Concatenamos de forma segura y nativa
+            final_tensor = torch.cat(tensors_list, dim=0)
 
             # 2. ENSAMBLAR AUDIO
             audio_files = sorted([f for f in os.listdir(cache_dir) if f.startswith('audio_') and f.endswith('.pt')])
