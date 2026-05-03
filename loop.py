@@ -242,7 +242,10 @@ class SequentialLoopTrigger:
                     inputs = node_data.get("inputs", {})
 
                     if not found_calculator and "AutoLoopCalculator" in class_type:
-                        estimated_chunk = inputs.get("target_frames_per_loop", 50)
+                        if class_type == "AutoLoopCalculatorTTS":
+                            estimated_chunk = 1
+                        else:
+                            estimated_chunk = inputs.get("target_frames_per_loop", 50)
                         found_calculator = True
 
                     # Mutación de semillas
