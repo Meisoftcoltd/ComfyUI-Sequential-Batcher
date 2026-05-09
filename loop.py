@@ -266,18 +266,12 @@ class SequentialLoopTrigger:
                 is_next_final = (global_accumulated_frames + estimated_chunk) >= global_source_frame_count
 
                 for inputs in master_switches:
-                    print(f"   -> 🔀 [Cirugía de Grafo] Mutando Master Switch para Ciclo {next_loop}...")
+                    print(f"   -> 🔀 [Cirugía de Grafo Segura] Mutando Master Switch para Ciclo {next_loop}...")
                     # Sobrescribimos el cable que viene del Stitcher por un booleano estático
                     inputs["is_final_cycle"] = is_next_final
 
-                    if is_next_final:
-                        if "on_false" in inputs:
-                            del inputs["on_false"]
-                            print(f"      ✂️ Cable 'on_false' eliminado (Ahorro de VRAM en ruta inactiva).")
-                    else:
-                        if "on_true" in inputs:
-                            del inputs["on_true"]
-                            print(f"      ✂️ Cable 'on_true' eliminado (Ruta pesada desconectada).")
+                    # 🛑 Eliminada la destrucción de cables (del inputs["on_true"/"on_false"])
+                    # Confiamos en la Evaluación Perezosa Nativa del MasterSwitch.
 
                 print(f"   -> 🎲 Semillas mutadas: {m_seeds}")
 
