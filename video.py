@@ -11,6 +11,7 @@ import folder_paths
 import time
 import uuid
 import subprocess
+import re
 from . import register_node
 
 # Intento de carga de OpenCV para el Director de Fotografía
@@ -597,11 +598,28 @@ class AutoLoopCalculatorTTS:
 
         # 1. Separar el texto según el modo elegido
         if split_mode == "Frases (Puntos)":
-            # Dividimos por punto, eliminamos vacíos y restauramos el punto final
-            raw_chunks = [p.strip() + "." for p in text.split('.') if p.strip()]
+            # 🧠 MAGIA REGEX: Separa por puntos, exclamaciones, interrogaciones o saltos de línea.
+            # Conserva el signo final y comillas para que el TTS lea con la entonación correcta.
+            parts = re.split(r'([.!?\n]+["\']?)', text)
+            chunks = []
+            for i in range(0, len(parts)-1, 2):
+                chunk = parts[i] + parts[i+1]
+                if chunk.strip():
+                    chunks.append(chunk.strip())
+            if len(parts) % 2 != 0 and parts[-1].strip():
+                chunks.append(parts[-1].strip())
+
+            # Unir puntuación huérfana al bloque anterior
+            raw_chunks = []
+            for chunk in chunks:
+                if re.match(r'^[\W_]+$', chunk) and raw_chunks:
+                    raw_chunks[-1] += chunk
+                else:
+                    raw_chunks.append(chunk)
+
             chunk_type_name = "Frases"
         else:
-            # Comportamiento original: Dividir por párrafos (saltos de línea)
+            # Comportamiento original: Dividir por párrafos (saltos de línea puros)
             raw_chunks = [p.strip() for p in text.split('\n') if p.strip()]
             chunk_type_name = "Párrafos"
 
