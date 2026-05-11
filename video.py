@@ -598,28 +598,35 @@ class AutoLoopCalculatorTTS:
 
         # 1. Separar el texto según el modo elegido
         if split_mode == "Frases (Puntos)":
-            # 🧠 MAGIA REGEX: Separa por puntos, exclamaciones, interrogaciones o saltos de línea.
-            # Conserva el signo final y comillas para que el TTS lea con la entonación correcta.
-            parts = re.split(r'([.!?\n]+["\']?)', text)
-            chunks = []
-            for i in range(0, len(parts)-1, 2):
-                chunk = parts[i] + parts[i+1]
-                if chunk.strip():
-                    chunks.append(chunk.strip())
-            if len(parts) % 2 != 0 and parts[-1].strip():
-                chunks.append(parts[-1].strip())
+            # PASO A: Separación cruda respetando todos los signos
+            matches = re.findall(r'[^.!?\n]+[.!?\n]*', text)
+            temp_chunks = [m.strip() for m in matches if m.strip()]
 
-            # Unir puntuación huérfana al bloque anterior
+            # PASO B: Fusión inteligente (Evitar micro-frases y roturas por "...")
+            MIN_WORDS = 5
             raw_chunks = []
-            for chunk in chunks:
-                if re.match(r'^[\W_]+$', chunk) and raw_chunks:
-                    raw_chunks[-1] += chunk
-                else:
-                    raw_chunks.append(chunk)
+            buffer_text = ""
 
-            chunk_type_name = "Frases"
+            for chunk in temp_chunks:
+                buffer_text = (buffer_text + " " + chunk).strip()
+                # Contamos las palabras reales acumuladas en el buffer
+                word_count = len(buffer_text.split())
+
+                # Si el bloque ya tiene suficiente "cuerpo", lo cerramos
+                if word_count >= MIN_WORDS:
+                    raw_chunks.append(buffer_text)
+                    buffer_text = ""
+
+            # PASO C: Si quedó texto corto huérfano al final, lo unimos al bloque anterior
+            if buffer_text:
+                if raw_chunks:
+                    raw_chunks[-1] += " " + buffer_text
+                else:
+                    raw_chunks.append(buffer_text)
+
+            chunk_type_name = "Frases Optimizadas"
         else:
-            # Comportamiento original: Dividir por párrafos (saltos de línea puros)
+            # Comportamiento original: Dividir por párrafos
             raw_chunks = [p.strip() for p in text.split('\n') if p.strip()]
             chunk_type_name = "Párrafos"
 
