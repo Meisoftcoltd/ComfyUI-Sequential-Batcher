@@ -13,6 +13,7 @@ global_source_frame_count = 1
 global_select_every_nth = 1
 global_server_port = 8188  # 💡 NUEVO: Única fuente de la verdad para el puerto
 global_ltx_mode = False
+global_step_by_chunk = False
 
 @register_node
 class SequentialLoopStart:
@@ -97,6 +98,8 @@ class AutoLoopCalculatorLTX:
         # --- Ajuste Proporcional LTX (Regla DiT 8n + 1) ---
         import math
         from . import loop
+
+        loop.global_step_by_chunk = False
 
         potential_effective_frames = source_frame_count // select_every_nth
 
