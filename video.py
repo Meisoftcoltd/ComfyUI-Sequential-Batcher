@@ -488,6 +488,8 @@ class AutoLoopCalculator:
         import math
         from . import loop
 
+        loop.global_step_by_chunk = False
+
         potential_effective_frames = source_frame_count // select_every_nth
         safe_effective_frames = potential_effective_frames # Sin restricciones
 
@@ -595,6 +597,8 @@ class AutoLoopCalculatorTTS:
             log_output.append(str(msg))
 
         from . import loop
+
+        loop.global_step_by_chunk = True
 
         # 1. Separar el texto según el modo elegido
         if split_mode == "Frases (Puntos)":
@@ -805,6 +809,8 @@ class AutoLoopCalculatorWan:
             log_output.append(str(msg))
         import math
         from . import loop
+
+        loop.global_step_by_chunk = False
 
         # --- MEISOFT PATCH: Sincronización Matemática (Hold Last Frame) ---
         # 1. Redondear hacia ARRIBA a la regla 4n+1 (Acolchado WanVideo)

@@ -179,17 +179,24 @@ class SessionImageSender:
         is_final_chunk = getattr(loop, 'global_is_final_chunk', False)
 
         # 🚀 FIX: Compensar los frames destruidos por el VAE en el ciclo final
-        if is_final_chunk:
-            _log(f"   -> 🏁 LOTE FINAL ABSOLUTO DETECTADO. Compensando mermas del VAE (Timeline forzado al 100%).")
-            loop.global_accumulated_frames = source_total
-        else:
-            loop.global_accumulated_frames += advanced_original_frames
+        is_chunk_mode = getattr(loop, 'global_step_by_chunk', False)
 
-        # 🚀 NUEVO: Detectar si es el ciclo final o un ciclo único
-        is_final_cycle = loop.global_accumulated_frames >= source_total
+        if is_chunk_mode:
+            # En modo TTS (Texto), el progreso se mide estrictamente en frases/chunks, no en frames de video.
+            is_final_cycle = is_final_chunk
+            _log(f"   -> 🧩 Modo Texto activo: Progreso gestionado por frases ({loop.global_accumulated_frames} / {source_total}).")
+        else:
+            # Lógica original por frames de video
+            if is_final_chunk:
+                _log(f"   -> 🏁 LOTE FINAL ABSOLUTO DETECTADO. Compensando mermas del VAE (Timeline forzado al 100%).")
+                loop.global_accumulated_frames = source_total
+            else:
+                loop.global_accumulated_frames += advanced_original_frames
+
+            is_final_cycle = loop.global_accumulated_frames >= source_total
+            _log(f"   -> 📈 Timeline avanzado a {loop.global_accumulated_frames} / {source_total} frames")
 
         _log(f"   -> ✂️ Tensor truncado a {frames_accepted} frames válidos.")
-        _log(f"   -> 📈 Timeline avanzado a {loop.global_accumulated_frames} / {source_total}")
 
         last_frame = valid_images[-1:].clone().cpu()
         global_session_image = last_frame
