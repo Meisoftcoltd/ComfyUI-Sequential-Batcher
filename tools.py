@@ -326,3 +326,50 @@ class VHS_Path_Selector:
         except Exception as e:
             _log(f"❌ [Path Selector] Error crítico: {e}")
             return ("", vhs_filenames, "\n".join(log_output))
+
+@register_node
+class AudioDurationCalculator:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "audio": ("AUDIO",),
+            }
+        }
+
+    RETURN_TYPES = ("FLOAT", "STRING")
+    RETURN_NAMES = ("duration_seconds", "log")
+    FUNCTION = "calculate"
+    CATEGORY = "🔁 Sequential Batcher/Tools"
+
+    def calculate(self, audio):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
+
+        _log(f"\n{'='*50}")
+        _log(f"⏱️ [Secuencial Batcher] NODO: Audio Duration Calculator")
+
+        # 1. Validación de seguridad para evitar crashes
+        if not isinstance(audio, dict):
+            _log("   -> ⚠️ No se detectó un diccionario de audio válido. Devolviendo 0.0")
+            _log(f"{'='*50}\n")
+            return (0.0, "\n".join(log_output))
+
+        waveform = audio.get("waveform")
+        sample_rate = audio.get("sample_rate", 44100)
+
+        if waveform is None:
+            _log("   -> ⚠️ No se detectó 'waveform' en el audio. Devolviendo 0.0")
+            _log(f"{'='*50}\n")
+            return (0.0, "\n".join(log_output))
+
+        # 2. Cálculo matemático
+        samples = waveform.shape[-1]
+        duration = float(samples) / float(sample_rate)
+
+        _log(f"   -> ✅ Duración calculada: {duration:.3f} segundos ({samples} samples @ {sample_rate}Hz)")
+        _log(f"{'='*50}\n")
+
+        return (duration, "\n".join(log_output))
