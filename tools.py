@@ -233,6 +233,10 @@ class VAESafeFramePadder:
         def _log(msg):
             print(msg)
             log_output.append(str(msg))
+
+        if not isinstance(images, torch.Tensor):
+            raise ValueError("[VAESafeFramePadder] Input is not a valid tensor.")
+
         n_frames = images.shape[0]
         target_frames = n_frames
 
