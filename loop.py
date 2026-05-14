@@ -95,6 +95,12 @@ class AutoLoopCalculatorLTX:
     CATEGORY = "🔁 Sequential Batcher/Loop"
 
     def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index, safe_faces_list=None, scene_cuts_list=None):
+        if source_frame_count <= 0 or target_frames_per_loop <= 0:
+            return (1, 0, select_every_nth)
+
+        source_frame_count = min(source_frame_count, 10000)
+        select_every_nth = max(1, select_every_nth)
+
         # --- Ajuste Proporcional LTX (Regla DiT 8n + 1) ---
         import math
         from . import loop
