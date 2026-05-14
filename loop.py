@@ -47,15 +47,24 @@ class SequentialLoopStart:
 
         # --- PRE-FLIGHT CHECK (FAIL-FAST) ---
         print(f"   -> 📡 Verificando conexión con ComfyUI en el puerto {port}...")
+
+        # Validar el puerto para prevenir SSRF (Server-Side Request Forgery)
+        try:
+            port_num = int(port)
+            if not (1 <= port_num <= 65535):
+                raise ValueError("Port must be between 1 and 65535")
+        except (ValueError, TypeError):
+            raise ValueError(f"🚨 EL PUERTO '{port}' ES INVÁLIDO. Debe ser un número entero entre 1 y 65535.")
+
         try:
             # Ping ultrarrápido a la API. Si falla, colapsa en 0.1 segundos.
-            req = urllib.request.Request(f"http://127.0.0.1:{port}/system_stats")
+            req = urllib.request.Request(f"http://127.0.0.1:{port_num}/system_stats")
             urllib.request.urlopen(req, timeout=2)
-            global_server_port = port  # Guardamos el puerto correcto para el Trigger
+            global_server_port = port_num  # Guardamos el puerto correcto para el Trigger
             print(f"   -> ✅ Conexión establecida. Puerto blindado.")
         except Exception as e:
-            print(f"   -> ❌ ERROR FATAL: No se pudo conectar al puerto {port}.")
-            raise ValueError(f"🚨 EL PUERTO {port} ES INCORRECTO O COMFYUI NO RESPONDE. "
+            print(f"   -> ❌ ERROR FATAL: No se pudo conectar al puerto {port_num}.")
+            raise ValueError(f"🚨 EL PUERTO {port_num} ES INCORRECTO O COMFYUI NO RESPONDE. "
                              f"Cambia el puerto en el nodo 'Loop Start' antes de procesar. (Error: {e})")
         # ------------------------------------
 
