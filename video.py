@@ -9,6 +9,7 @@ import torch
 import torchaudio
 import folder_paths
 import time
+from safetensors.torch import save_file, load_file
 import uuid
 import subprocess
 import re
@@ -722,10 +723,15 @@ class IncrementalVideoStitcher:
             img = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
             img.save(path, format="PNG")
 
-        # 🎵 GUARDAR AUDIO EN CACHÉ (.pt)
+        # 🎵 GUARDAR AUDIO EN CACHÉ (.safetensors)
         if audio is not None:
-            audio_path = os.path.join(cache_dir, f"audio_{current_loop_index:04d}_{timestamp}.pt")
-            torch.save(audio, audio_path)
+            audio_path = os.path.join(cache_dir, f"audio_{current_loop_index:04d}_{timestamp}.safetensors")
+            # Convert sample_rate to tensor for safetensors compatibility
+            audio_data = {
+                "waveform": audio["waveform"],
+                "sample_rate": torch.tensor(audio["sample_rate"], dtype=torch.int32)
+            }
+            save_file(audio_data, audio_path)
 
         source_total = getattr(loop, 'global_source_frame_count', 1)
         is_final_chunk = getattr(loop, 'global_is_final_chunk', False)
@@ -756,16 +762,16 @@ class IncrementalVideoStitcher:
             final_tensor = torch.cat(tensors_list, dim=0)
 
             # 2. ENSAMBLAR AUDIO
-            audio_files = sorted([f for f in os.listdir(cache_dir) if f.startswith('audio_') and f.endswith('.pt')])
+            audio_files = sorted([f for f in os.listdir(cache_dir) if f.startswith('audio_') and f.endswith('.safetensors')])
             final_audio = None
             if audio_files:
                 _log(f"   -> 🎵 Ensamblando {len(audio_files)} fragmentos de audio...")
                 waveforms = []
                 sample_rate = 44100
                 for af in audio_files:
-                    chunk_audio = torch.load(os.path.join(cache_dir, af), weights_only=True)
+                    chunk_audio = load_file(os.path.join(cache_dir, af))
                     waveforms.append(chunk_audio["waveform"])
-                    sample_rate = chunk_audio["sample_rate"]
+                    sample_rate = chunk_audio["sample_rate"].item()
 
                 # Concatenamos los audios en el eje del tiempo (dimensión -1)
                 final_waveform = torch.cat(waveforms, dim=-1)

@@ -6,6 +6,7 @@ import os
 
 # Create persistent mocks that we will reset in each test
 m_torch = MagicMock()
+m_torch.__version__ = "2.1.0"
 m_torchaudio = MagicMock()
 m_transforms = MagicMock()
 
