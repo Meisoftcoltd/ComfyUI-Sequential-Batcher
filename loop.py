@@ -41,22 +41,39 @@ class SequentialLoopStart:
         global global_accumulated_frames
         global global_server_port
         global global_ltx_mode
+        import sys
+        import argparse
 
         print(f"\n{'='*50}")
         print(f"🚀 [DEBUG] NODO: Loop Start (Motor Dinámico)")
 
-        # --- PRE-FLIGHT CHECK (FAIL-FAST) ---
-        print(f"   -> 📡 Verificando conexión con ComfyUI en el puerto {port}...")
+        # --- PRE-FLIGHT CHECK (SECURITY SSRF FIX) ---
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--port", type=int, default=8188)
         try:
-            # Ping ultrarrápido a la API. Si falla, colapsa en 0.1 segundos.
-            req = urllib.request.Request(f"http://127.0.0.1:{port}/system_stats")
+            args, _ = parser.parse_known_args(sys.argv[1:])
+            system_port = args.port
+        except:
+            system_port = 8188
+
+        if port != system_port:
+            print(f"   -> ⚠️ ATENCIÓN: El puerto de entrada ({port}) no coincide con el puerto del sistema ({system_port}).")
+            print(f"   -> 🔒 Por motivos de seguridad (Prevención SSRF), se forzará el puerto real del sistema: {system_port}.")
+            safe_port = system_port
+        else:
+            safe_port = system_port
+
+        print(f"   -> 📡 Verificando conexión con ComfyUI en el puerto seguro {safe_port}...")
+        try:
+            # Ping ultrarrápido a la API para verificar el puerto seguro.
+            req = urllib.request.Request(f"http://127.0.0.1:{safe_port}/system_stats")
             urllib.request.urlopen(req, timeout=2)
-            global_server_port = port  # Guardamos el puerto correcto para el Trigger
-            print(f"   -> ✅ Conexión establecida. Puerto blindado.")
+            global_server_port = safe_port  # Guardamos el puerto seguro para el Trigger
+            print(f"   -> ✅ Conexión establecida. Puerto blindado y seguro.")
         except Exception as e:
-            print(f"   -> ❌ ERROR FATAL: No se pudo conectar al puerto {port}.")
-            raise ValueError(f"🚨 EL PUERTO {port} ES INCORRECTO O COMFYUI NO RESPONDE. "
-                             f"Cambia el puerto en el nodo 'Loop Start' antes de procesar. (Error: {e})")
+            print(f"   -> ❌ ERROR FATAL: No se pudo conectar al puerto seguro {safe_port}.")
+            raise ValueError(f"🚨 EL PUERTO SEGURO DETECTADO ({safe_port}) NO RESPONDE. "
+                             f"Verifica que ComfyUI se esté ejecutando correctamente. (Error: {e})")
         # ------------------------------------
 
         is_reset = str(reset_loop).lower() in ['true', '1', 't', 'y']
