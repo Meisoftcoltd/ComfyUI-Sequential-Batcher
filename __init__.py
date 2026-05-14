@@ -1,5 +1,3 @@
-import os
-
 __version__ = "1.6.0"
 
 NODE_CLASS_MAPPINGS = {}
