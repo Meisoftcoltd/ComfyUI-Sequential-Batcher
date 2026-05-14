@@ -484,6 +484,14 @@ class AutoLoopCalculator:
         def _log(msg):
             print(msg)
             log_output.append(str(msg))
+
+        if source_frame_count <= 0 or target_frames_per_loop <= 0:
+            _log("⚠️ [WARNING] Invalid frame count or target frames per loop.")
+            return (1, 0, select_every_nth, "\n".join(log_output))
+
+        source_frame_count = min(source_frame_count, 10000)
+        select_every_nth = max(1, select_every_nth)
+
         # --- Ajuste Proporcional Base (Sin restricciones VAE) ---
         import math
         from . import loop
@@ -807,6 +815,14 @@ class AutoLoopCalculatorWan:
         def _log(msg):
             print(msg)
             log_output.append(str(msg))
+
+        if source_frame_count <= 0 or target_frames_per_loop <= 0:
+            _log("⚠️ [WARNING] Invalid frame count or target frames per loop.")
+            return (1, 0, select_every_nth, "\n".join(log_output))
+
+        source_frame_count = min(source_frame_count, 10000)
+        select_every_nth = max(1, select_every_nth)
+
         import math
         from . import loop
 
