@@ -3,3 +3,4 @@ torchaudio
 numpy
 Pillow
 opencv-python
+safetensors
