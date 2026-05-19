@@ -64,16 +64,22 @@ class SequentialLoopStart:
             safe_port = system_port
 
         print(f"   -> 📡 Verificando conexión con ComfyUI en el puerto seguro {safe_port}...")
-        try:
-            # Ping ultrarrápido a la API para verificar el puerto seguro.
-            req = urllib.request.Request(f"http://127.0.0.1:{safe_port}/system_stats")
-            urllib.request.urlopen(req, timeout=2)
-            global_server_port = safe_port  # Guardamos el puerto seguro para el Trigger
-            print(f"   -> ✅ Conexión establecida. Puerto blindado y seguro.")
-        except Exception as e:
-            print(f"   -> ❌ ERROR FATAL: No se pudo conectar al puerto seguro {safe_port}.")
-            raise ValueError(f"🚨 EL PUERTO SEGURO DETECTADO ({safe_port}) NO RESPONDE. "
-                             f"Verifica que ComfyUI se esté ejecutando correctamente. (Error: {e})")
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                req = urllib.request.Request(f"http://127.0.0.1:{safe_port}/system_stats")
+                urllib.request.urlopen(req, timeout=10)
+                global_server_port = safe_port
+                print(f"   -> ✅ Conexión establecida. Puerto blindado y seguro.")
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"   -> ⏳ Reintentando conexión ({attempt + 1}/{max_retries}) por alta carga del servidor...")
+                    time.sleep(1)
+                else:
+                    error_msg = f"🚨 FATAL ERROR: EL PUERTO {safe_port} NO RESPONDE TRAS VARIOS INTENTOS. El servidor ComfyUI podría estar bloqueado o apagado. (Error original: {e})"
+                    print(f"   -> ❌ {error_msg}")
+                    raise RuntimeError(error_msg)
         # ------------------------------------
 
         is_reset = str(reset_loop).lower() in ['true', '1', 't', 'y']
