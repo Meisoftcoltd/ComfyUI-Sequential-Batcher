@@ -283,7 +283,8 @@ class SequentialLoopTrigger:
                     # Mutación de semillas
                     for key in ["seed", "noise_seed"]:
                         if key in inputs and isinstance(inputs[key], (int, float)):
-                            inputs[key] = random.randint(1, 0xffffffff)
+                            # 💡 FIX: Límite bajado a 0x7fffffff para no crashear OllamaOptionsV2
+                            inputs[key] = random.randint(1, 0x7fffffff)
                             m_seeds += 1
 
                     # Mutación de índice
