@@ -9,6 +9,7 @@ mock_torch = types.ModuleType("torch")
 class MockTensor:
     pass
 mock_torch.Tensor = MockTensor
+mock_torch.Tensor.__module__ = "torch"
 sys.modules["torch"] = mock_torch
 
 def get_VAESafeFramePadder():

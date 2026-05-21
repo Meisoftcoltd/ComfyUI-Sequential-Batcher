@@ -14,6 +14,9 @@ global_select_every_nth = 1
 global_server_port = 8188  # 💡 NUEVO: Única fuente de la verdad para el puerto
 global_ltx_mode = False
 global_step_by_chunk = False
+global_batch_index = 0
+global_has_more_batches = False
+global_is_batch_advancing = False
 
 @register_node
 class SequentialLoopStart:
@@ -88,12 +91,101 @@ class SequentialLoopStart:
             global_accumulated_frames = 0
             global_ltx_mode = False # 💡 REINICIO DE SEGURIDAD PARA LTX
             print("   -> 🔄 Bucle y Acumulador reiniciados a 0.")
+
+            # 💡 NUEVO: Control de lotes (Batch)
+            global global_batch_index, global_is_batch_advancing
+            if not global_is_batch_advancing:
+                global_batch_index = 0
+                print("   -> 🆕 Reinicio completo detectado. Lote (Batch) reiniciado a 0.")
+            global_is_batch_advancing = False
         else:
             global_loop_index = loop_idx
 
         print(f"   -> 📍 Índice actual de bucle: {global_loop_index}")
         print(f"{'='*50}\n")
         return (global_loop_index,)
+
+@register_node
+class AutoLoopCalculatorTTSBatch:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "text_list": ("STRING", {"forceInput": True}),
+                "split_mode": (["Párrafos (Saltos de línea)", "Frases (Puntos)"], {"default": "Párrafos (Saltos de línea)"}),
+                "current_loop_index": ("INT", {"forceInput": True}),
+            }
+        }
+
+    INPUT_IS_LIST = True
+    RETURN_TYPES = ("STRING", "INT", "INT", "STRING")
+    RETURN_NAMES = ("current_text", "current_index", "total_chunks", "log")
+    FUNCTION = "calculate"
+    CATEGORY = "🔁 Sequential Batcher/Text"
+
+    def calculate(self, text_list, split_mode, current_loop_index):
+        log_output = []
+        def _log(msg):
+            print(msg); log_output.append(str(msg))
+
+        from . import loop
+        import re
+
+        loop.global_step_by_chunk = True
+
+        texts = text_list if isinstance(text_list, list) else [text_list]
+        mode = split_mode[0] if isinstance(split_mode, list) else split_mode
+        idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
+
+        current_batch_idx = getattr(loop, 'global_batch_index', 0)
+        if current_batch_idx >= len(texts):
+            current_batch_idx = len(texts) - 1
+
+        current_file_text = texts[current_batch_idx]
+
+        if mode == "Frases (Puntos)":
+            matches = re.findall(r'[^.!?\n]+[.!?\n]*', current_file_text)
+            temp_chunks = [m.strip() for m in matches if m.strip()]
+            MIN_WORDS = 5
+            raw_chunks = []
+            buffer_text = ""
+            for chunk in temp_chunks:
+                buffer_text = (buffer_text + " " + chunk).strip()
+                if len(buffer_text.split()) >= MIN_WORDS:
+                    raw_chunks.append(buffer_text)
+                    buffer_text = ""
+            if buffer_text:
+                if raw_chunks: raw_chunks[-1] += " " + buffer_text
+                else: raw_chunks.append(buffer_text)
+            chunk_type_name = "Frases Optimizadas"
+        else:
+            raw_chunks = [p.strip() for p in current_file_text.split('\n') if p.strip()]
+            chunk_type_name = "Párrafos"
+
+        total_chunks = len(raw_chunks)
+        if total_chunks == 0:
+            raw_chunks = [""]
+            total_chunks = 1
+
+        safe_index = min(idx, total_chunks - 1)
+        current_chunk_text = raw_chunks[safe_index]
+
+        loop.global_source_frame_count = total_chunks
+        loop.global_accumulated_frames = safe_index + 1
+        loop.global_is_final_chunk = (safe_index + 1) >= total_chunks
+        loop.global_has_more_batches = (current_batch_idx < len(texts) - 1)
+
+        _log(f"\n{'='*50}")
+        _log(f"🗣️ [Secuencial Batcher] NODO: Auto Loop Calculator (TTS Batch)")
+        _log(f"   -> Archivo {current_batch_idx + 1} de {len(texts)} en el lote.")
+        _log(f"   -> Modo de división: {mode}")
+        _log(f"   -> {chunk_type_name} detectados: {total_chunks}")
+        _log(f"   -> Timeline: Bloque {safe_index + 1} de {total_chunks}")
+        _log(f"   -> 📜 Texto a procesar: {current_chunk_text[:75]}...")
+        _log(f"{'='*50}\n")
+
+        # Must return as lists because INPUT_IS_LIST = True
+        return ([current_chunk_text], [safe_index], [total_chunks], ["\n".join(log_output)])
 
 @register_node
 class AutoLoopCalculatorLTX:
@@ -254,16 +346,18 @@ class SequentialLoopTrigger:
         global global_server_port
 
         next_loop = global_loop_index + 1
-        is_final = global_accumulated_frames >= global_source_frame_count
+        is_final_chunk = global_accumulated_frames >= global_source_frame_count
+
+        import loop
+        has_more_batches = getattr(loop, 'global_has_more_batches', False)
 
         print(f"\n{'='*50}")
         print(f"🎯 [DEBUG] NODO: Loop Trigger")
-        print(f"   -> Progreso del vídeo: {global_accumulated_frames} / {global_source_frame_count} frames.")
+        print(f"   -> Progreso: {global_accumulated_frames} / {global_source_frame_count} chunks/frames.")
 
-        if not is_final:
-            print(f"   -> ⚙️ Preparando Ciclo {next_loop}...")
+        # 💡 FIX: Reencolar si NO es el final del chunk, O si es el final pero hay más archivos
+        if not is_final_chunk or has_more_batches:
             if prompt is not None:
-                # 🧠 HACKER MODE: Estimamos si el ciclo que vamos a encolar es el final
                 estimated_chunk = 50
                 found_calculator = False
                 m_seeds = 0
@@ -274,91 +368,77 @@ class SequentialLoopTrigger:
                     inputs = node_data.get("inputs", {})
 
                     if not found_calculator and "AutoLoopCalculator" in class_type:
-                        if class_type == "AutoLoopCalculatorTTS":
+                        if "TTS" in class_type:
                             estimated_chunk = 1
                         else:
                             estimated_chunk = inputs.get("target_frames_per_loop", 50)
                         found_calculator = True
 
-                    # Mutación de semillas
                     for key in ["seed", "noise_seed"]:
                         if key in inputs and isinstance(inputs[key], (int, float)):
-                            # 💡 FIX: Límite bajado a 0x7fffffff para no crashear OllamaOptionsV2
                             inputs[key] = random.randint(1, 0x7fffffff)
                             m_seeds += 1
 
-                    # Mutación de índice
                     if class_type == "SequentialLoopStart":
-                        inputs["loop_idx"] = next_loop
-                        inputs["reset_loop"] = False
+                        if is_final_chunk and has_more_batches:
+                            inputs["loop_idx"] = 0
+                            inputs["reset_loop"] = True
+                        else:
+                            inputs["loop_idx"] = next_loop
+                            inputs["reset_loop"] = False
 
-                    # 🔪 Recolectamos Master Switch para cirugía diferida
                     if class_type == "MasterSwitch":
                         master_switches.append(inputs)
 
                 is_next_final = (global_accumulated_frames + estimated_chunk) >= global_source_frame_count
+                if is_final_chunk and has_more_batches:
+                    is_next_final = False
 
                 for inputs in master_switches:
-                    print(f"   -> 🔀 [Cirugía de Grafo Segura] Mutando Master Switch para Ciclo {next_loop}...")
-                    # Sobrescribimos el cable que viene del Stitcher por un booleano estático
                     inputs["is_final_cycle"] = is_next_final
 
-                    # 🛑 Eliminada la destrucción de cables (del inputs["on_true"/"on_false"])
-                    # Confiamos en la Evaluación Perezosa Nativa del MasterSwitch.
-
-                print(f"   -> 🎲 Semillas mutadas: {m_seeds}")
+                if is_final_chunk and has_more_batches:
+                    loop.global_batch_index = getattr(loop, 'global_batch_index', 0) + 1
+                    loop.global_is_batch_advancing = True
+                    print(f"   -> 📦 Archivo finalizado. Iniciando archivo {loop.global_batch_index + 1} del lote...")
+                else:
+                    print(f"   -> ⚙️ Preparando Ciclo {next_loop}...")
 
             p = {"prompt": prompt}
-            if extra_pnginfo:
-                p["extra_data"] = {"extra_pnginfo": extra_pnginfo}
+            if extra_pnginfo: p["extra_data"] = {"extra_pnginfo": extra_pnginfo}
             data = json.dumps(p).encode('utf-8')
             req = urllib.request.Request(f"http://127.0.0.1:{global_server_port}/prompt", data=data, headers={'Content-Type': 'application/json'})
             try:
                 urllib.request.urlopen(req, timeout=5)
-                print(f"   -> ✅ Ciclo {next_loop} inyectado en la cola.")
+                print(f"   -> ✅ Siguiente ciclo inyectado en la cola.")
             except Exception as e:
                 print(f"   -> ❌ Error HTTP: {e}")
 
-            # Limpieza ligera por ciclo para evitar fragmentación
-            import gc
-            import torch
-            import comfy.model_management as mm
+            import gc, torch
             gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            if torch.cuda.is_available(): torch.cuda.empty_cache()
 
         else:
-            print(f"   -> 🏁 ¡Generación Finalizada! Todos los frames ensamblados.")
-
-            # --- LIMPIEZA EXTREMA DE VRAM AUTOMÁTICA (Multi-Plataforma) ---
+            print(f"   -> 🏁 ¡Generación Finalizada! Todos los archivos del lote completados.")
+            # ... Mantener aquí el código existente de limpieza extrema de VRAM (mm.unload_all_models, malloc_trim, etc.) ...
             print(f"   -> 🧹 Iniciando vaciado automático de VRAM...")
             import gc
             import torch
             import comfy.model_management as mm
             try:
-                # 1. Obligamos al motor interno de ComfyUI a soltar los modelos
                 mm.unload_all_models()
                 mm.soft_empty_cache()
             except Exception as e:
-                print(f"   -> ⚠️ Aviso: No se pudo usar model_management: {e}")
-
-            # 2. Forzamos al recolector de basura de Python
+                pass
             gc.collect()
-
-            # 3. Le arrancamos a PyTorch la memoria reservada (CUDA, ROCm y Mac MPS)
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
-
-                # HACK: Forzar la desfragmentación de la memoria caché de PyTorch
                 import ctypes
-                try:
-                    ctypes.CDLL('libc.so.6').malloc_trim(0)
-                except Exception:
-                    pass
+                try: ctypes.CDLL('libc.so.6').malloc_trim(0)
+                except Exception: pass
             elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
                 torch.mps.empty_cache()
-
             print(f"   -> ✨ VRAM liberada con éxito. Gráfica lista para nuevos flujos.")
 
         print(f"{'='*50}\n")
