@@ -117,7 +117,7 @@ class AutoLoopCalculatorTTSBatch:
             }
         }
 
-    INPUT_IS_LIST = True
+    # 💡 FIX: Eliminado INPUT_IS_LIST = True para evitar que ComfyUI modifique los tipos de salida
     RETURN_TYPES = ("STRING", "INT", "INT", "STRING")
     RETURN_NAMES = ("current_text", "current_index", "total_chunks", "log")
     FUNCTION = "calculate"
@@ -133,16 +133,11 @@ class AutoLoopCalculatorTTSBatch:
 
         loop.global_step_by_chunk = True
 
-        # 💡 FIX: Desempaquetar la doble lista generada por INPUT_IS_LIST = True
-        if isinstance(text_list, list) and len(text_list) > 0 and isinstance(text_list[0], list):
-            texts = text_list[0]
-        elif isinstance(text_list, list):
-            texts = text_list
-        else:
-            texts = [text_list]
+        # Como eliminamos INPUT_IS_LIST, text_list llega como la lista pura desde el Reader
+        texts = text_list if isinstance(text_list, list) else [text_list]
 
-        mode = split_mode[0] if isinstance(split_mode, list) else split_mode
-        idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
+        mode = split_mode
+        idx = current_loop_index
 
         current_batch_idx = getattr(loop, 'global_batch_index', 0)
         if current_batch_idx >= len(texts):
@@ -191,8 +186,8 @@ class AutoLoopCalculatorTTSBatch:
         _log(f"   -> 📜 Texto a procesar: {current_chunk_text[:75]}...")
         _log(f"{'='*50}\n")
 
-        # Must return as lists because INPUT_IS_LIST = True
-        return ([current_chunk_text], [safe_index], [total_chunks], ["\n".join(log_output)])
+        # 💡 FIX: Devolvemos valores nativos, no listas
+        return (current_chunk_text, safe_index, total_chunks, "\n".join(log_output))
 
 @register_node
 class AutoLoopCalculatorLTX:
