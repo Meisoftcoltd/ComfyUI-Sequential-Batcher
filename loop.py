@@ -112,18 +112,18 @@ class AutoLoopCalculatorTTSBatch:
         return {
             "required": {
                 "text_list": ("STRING", {"forceInput": True}),
+                "file_names": ("STRING", {"forceInput": True}),
                 "split_mode": (["Párrafos (Saltos de línea)", "Frases (Puntos)"], {"default": "Párrafos (Saltos de línea)"}),
                 "current_loop_index": ("INT", {"forceInput": True}),
             }
         }
 
-    # 💡 FIX: Eliminado INPUT_IS_LIST = True para evitar que ComfyUI modifique los tipos de salida
-    RETURN_TYPES = ("STRING", "INT", "INT", "STRING")
-    RETURN_NAMES = ("current_text", "current_index", "total_chunks", "log")
+    RETURN_TYPES = ("STRING", "INT", "INT", "STRING", "STRING")
+    RETURN_NAMES = ("current_text", "current_index", "total_chunks", "current_file_name", "log")
     FUNCTION = "calculate"
     CATEGORY = "🔁 Sequential Batcher/Text"
 
-    def calculate(self, text_list, split_mode, current_loop_index):
+    def calculate(self, text_list, file_names, split_mode, current_loop_index):
         log_output = []
         def _log(msg):
             print(msg); log_output.append(str(msg))
@@ -133,8 +133,9 @@ class AutoLoopCalculatorTTSBatch:
 
         loop.global_step_by_chunk = True
 
-        # Como eliminamos INPUT_IS_LIST, text_list llega como la lista pura desde el Reader
-        texts = text_list if isinstance(text_list, list) else [text_list]
+        # Desempaquetado seguro para evitar dobles listas de ComfyUI
+        texts = text_list[0] if (isinstance(text_list, list) and len(text_list) > 0 and isinstance(text_list[0], list)) else (text_list if isinstance(text_list, list) else [text_list])
+        names = file_names[0] if (isinstance(file_names, list) and len(file_names) > 0 and isinstance(file_names[0], list)) else (file_names if isinstance(file_names, list) else [file_names])
 
         mode = split_mode
         idx = current_loop_index
@@ -144,6 +145,7 @@ class AutoLoopCalculatorTTSBatch:
             current_batch_idx = len(texts) - 1
 
         current_file_text = texts[current_batch_idx]
+        current_name = names[current_batch_idx] if current_batch_idx < len(names) else "unknown"
 
         if mode == "Frases (Puntos)":
             matches = re.findall(r'[^.!?\n]+[.!?\n]*', current_file_text)
@@ -179,15 +181,14 @@ class AutoLoopCalculatorTTSBatch:
 
         _log(f"\n{'='*50}")
         _log(f"🗣️ [Secuencial Batcher] NODO: Auto Loop Calculator (TTS Batch)")
-        _log(f"   -> Archivo {current_batch_idx + 1} de {len(texts)} en el lote.")
+        _log(f"   -> Archivo {current_batch_idx + 1} de {len(texts)}: {current_name}")
         _log(f"   -> Modo de división: {mode}")
         _log(f"   -> {chunk_type_name} detectados: {total_chunks}")
         _log(f"   -> Timeline: Bloque {safe_index + 1} de {total_chunks}")
         _log(f"   -> 📜 Texto a procesar: {current_chunk_text[:75]}...")
         _log(f"{'='*50}\n")
 
-        # 💡 FIX: Devolvemos valores nativos, no listas
-        return (current_chunk_text, safe_index, total_chunks, "\n".join(log_output))
+        return (current_chunk_text, safe_index, total_chunks, current_name, "\n".join(log_output))
 
 @register_node
 class AutoLoopCalculatorLTX:
