@@ -350,7 +350,7 @@ class SequentialLoopTrigger:
         next_loop = global_loop_index + 1
         is_final_chunk = global_accumulated_frames >= global_source_frame_count
 
-        import loop
+        from . import loop
         has_more_batches = getattr(loop, 'global_has_more_batches', False)
 
         print(f"\n{'='*50}")
