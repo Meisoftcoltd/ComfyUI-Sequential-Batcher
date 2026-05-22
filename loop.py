@@ -133,7 +133,14 @@ class AutoLoopCalculatorTTSBatch:
 
         loop.global_step_by_chunk = True
 
-        texts = text_list if isinstance(text_list, list) else [text_list]
+        # 💡 FIX: Desempaquetar la doble lista generada por INPUT_IS_LIST = True
+        if isinstance(text_list, list) and len(text_list) > 0 and isinstance(text_list[0], list):
+            texts = text_list[0]
+        elif isinstance(text_list, list):
+            texts = text_list
+        else:
+            texts = [text_list]
+
         mode = split_mode[0] if isinstance(split_mode, list) else split_mode
         idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
 
