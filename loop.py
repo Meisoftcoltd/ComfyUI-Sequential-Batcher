@@ -44,6 +44,8 @@ class SequentialLoopStart:
         global global_accumulated_frames
         global global_server_port
         global global_ltx_mode
+        global global_batch_index
+        global global_is_batch_advancing
         import sys
         import argparse
 
@@ -86,20 +88,23 @@ class SequentialLoopStart:
         # ------------------------------------
 
         is_reset = str(reset_loop).lower() in ['true', '1', 't', 'y']
+
+        # 💡 FIX: Detectar si es un arranque manual del usuario para resetear el lote
+        if loop_idx == 0 and not is_reset:
+            global_is_batch_advancing = False
+            global_batch_index = 0
+            print("   -> 🆕 Arranque manual detectado. Lote (Batch) reiniciado a 0.")
+
         if is_reset or loop_idx == 0:
             global_loop_index = 0
             global_accumulated_frames = 0
-            global_ltx_mode = False # 💡 REINICIO DE SEGURIDAD PARA LTX
+            global_ltx_mode = False
             print("   -> 🔄 Bucle y Acumulador reiniciados a 0.")
-
-            # 💡 NUEVO: Control de lotes (Batch)
-            global global_batch_index, global_is_batch_advancing
-            if not global_is_batch_advancing:
-                global_batch_index = 0
-                print("   -> 🆕 Reinicio completo detectado. Lote (Batch) reiniciado a 0.")
-            global_is_batch_advancing = False
+            # HACK: Mantenemos global_is_batch_advancing = True durante el ciclo 0
         else:
             global_loop_index = loop_idx
+            # Lo apagamos a partir del ciclo 1
+            global_is_batch_advancing = False
 
         print(f"   -> 📍 Índice actual de bucle: {global_loop_index}")
         print(f"{'='*50}\n")
