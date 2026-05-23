@@ -118,6 +118,9 @@ class AutoLoopCalculatorTTSBatch:
             }
         }
 
+    INPUT_IS_LIST = True
+    OUTPUT_IS_LIST = (True, True, True, True, True)
+
     RETURN_TYPES = ("STRING", "INT", "INT", "STRING", "STRING")
     RETURN_NAMES = ("current_text", "current_index", "total_chunks", "current_file_name", "log")
     FUNCTION = "calculate"
@@ -133,12 +136,11 @@ class AutoLoopCalculatorTTSBatch:
 
         loop.global_step_by_chunk = True
 
-        # Desempaquetado seguro para evitar dobles listas de ComfyUI
         texts = text_list[0] if (isinstance(text_list, list) and len(text_list) > 0 and isinstance(text_list[0], list)) else (text_list if isinstance(text_list, list) else [text_list])
         names = file_names[0] if (isinstance(file_names, list) and len(file_names) > 0 and isinstance(file_names[0], list)) else (file_names if isinstance(file_names, list) else [file_names])
 
-        mode = split_mode
-        idx = current_loop_index
+        mode = split_mode[0] if isinstance(split_mode, list) else split_mode
+        idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
 
         current_batch_idx = getattr(loop, 'global_batch_index', 0)
         if current_batch_idx >= len(texts):
@@ -188,7 +190,7 @@ class AutoLoopCalculatorTTSBatch:
         _log(f"   -> 📜 Texto a procesar: {current_chunk_text[:75]}...")
         _log(f"{'='*50}\n")
 
-        return (current_chunk_text, safe_index, total_chunks, current_name, "\n".join(log_output))
+        return ([current_chunk_text], [safe_index], [total_chunks], [current_name], ["\n".join(log_output)])
 
 @register_node
 class AutoLoopCalculatorLTX:
