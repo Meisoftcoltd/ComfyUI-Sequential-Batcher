@@ -191,7 +191,7 @@ class AutoLoopCalculatorTTSBatch:
         _log(f"   -> 📜 Texto a procesar: {current_chunk_text[:75]}...")
         _log(f"{'='*50}\n")
 
-        return ([current_chunk_text], [safe_index], [total_chunks], [current_name], ["\n".join(log_output)])
+        return (current_chunk_text, safe_index, total_chunks, current_name, "\n".join(log_output))
 
 @register_node
 class AutoLoopCalculatorLTX:

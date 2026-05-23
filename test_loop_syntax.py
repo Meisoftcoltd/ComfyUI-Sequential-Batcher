@@ -8,14 +8,16 @@ sys.modules['comfy.model_management'] = unittest.mock.MagicMock()
 sys.modules['folder_paths'] = unittest.mock.MagicMock()
 
 # Mock internal import to prevent syntax error on register_node
-class DummyRegister:
-    def __call__(self, cls):
-        return cls
-
-sys.modules['__main__'].register_node = DummyRegister()
+import types
+dummy_module = types.ModuleType("dummy")
+dummy_module.register_node = lambda c: c
+sys.modules[__package__ or '.'] = dummy_module
 
 try:
-    import loop
+    with open('loop.py') as f:
+        code = f.read()
+    code = code.replace('from . import register_node', 'def register_node(c): return c')
+    exec(code)
     print("Syntax is OK")
 except Exception as e:
     import traceback
