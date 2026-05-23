@@ -118,8 +118,9 @@ class AutoLoopCalculatorTTSBatch:
             }
         }
 
+    # 💡 FIX: Mantenemos INPUT_IS_LIST para absorber el batch, pero ELIMINAMOS OUTPUT_IS_LIST
+    # para que ComfyUI desempaquete las salidas automáticamente.
     INPUT_IS_LIST = True
-    OUTPUT_IS_LIST = (True, True, True, True, True)
 
     RETURN_TYPES = ("STRING", "INT", "INT", "STRING", "STRING")
     RETURN_NAMES = ("current_text", "current_index", "total_chunks", "current_file_name", "log")
