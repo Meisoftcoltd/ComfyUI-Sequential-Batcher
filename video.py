@@ -480,6 +480,11 @@ class AutoLoopCalculator:
     FUNCTION = "calculate"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        import time
+        return time.time()
+
     def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index, safe_faces_list=None, scene_cuts_list=None):
         log_output = []
         def _log(msg):
@@ -598,6 +603,11 @@ class AutoLoopCalculatorTTS:
     RETURN_NAMES = ("current_text", "current_index", "total_chunks", "log")
     FUNCTION = "calculate"
     CATEGORY = "🔁 Sequential Batcher/Text"
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        import time
+        return time.time()
 
     def calculate(self, text, split_mode, current_loop_index):
         log_output = []
@@ -815,6 +825,11 @@ class AutoLoopCalculatorWan:
     RETURN_NAMES = ("chunk_frames", "skip_frames", "select_every_nth", "log")
     FUNCTION = "calculate"
     CATEGORY = "🔁 Sequential Batcher/Video"
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        import time
+        return time.time()
 
     def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index, safe_faces_list=None, scene_cuts_list=None):
         log_output = []

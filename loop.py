@@ -132,6 +132,11 @@ class AutoLoopCalculatorTTSBatch:
     FUNCTION = "calculate"
     CATEGORY = "🔁 Sequential Batcher/Text"
 
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        import time
+        return time.time()
+
     def calculate(self, text_list, file_names, split_mode, current_loop_index):
         log_output = []
         def _log(msg):
@@ -219,6 +224,11 @@ class AutoLoopCalculatorLTX:
     RETURN_NAMES = ("chunk_frames", "skip_frames", "select_every_nth")
     FUNCTION = "calculate"
     CATEGORY = "🔁 Sequential Batcher/Loop"
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        import time
+        return time.time()
 
     def calculate(self, source_frame_count, target_frames_per_loop, select_every_nth, current_loop_index, safe_faces_list=None, scene_cuts_list=None):
         if source_frame_count <= 0 or target_frames_per_loop <= 0:

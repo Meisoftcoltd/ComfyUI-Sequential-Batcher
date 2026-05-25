@@ -65,6 +65,11 @@ class LazySessionCache:
     FUNCTION = "execute"
     CATEGORY = "🔁 Sequential Batcher/Logic"
 
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        import time
+        return time.time()
+
     # 🔥 LA CLAVE: Aquí es donde ComfyUI decide si "tira del cable" o no
     def check_lazy_status(self, current_loop_index, **kwargs):
         # El índice llega como una lista o un int dependiendo del nodo anterior
