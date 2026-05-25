@@ -690,8 +690,8 @@ class IncrementalVideoStitcher:
             }
         }
 
-    RETURN_TYPES = ("IMAGE", "AUDIO", "BOOLEAN", "STRING")
-    RETURN_NAMES = ("ALL_IMAGES", "AUDIO_OUT", "IS_FINAL_CYCLE", "log")
+    RETURN_TYPES = ("IMAGE", "AUDIO", "BOOLEAN", "BOOLEAN", "STRING")
+    RETURN_NAMES = ("ALL_IMAGES", "AUDIO_OUT", "IS_FINAL_CYCLE", "IS_ABSOLUTE_FINAL", "log")
     FUNCTION = "stitch"
     CATEGORY = "🔁 Sequential Batcher/Video"
 
@@ -746,14 +746,18 @@ class IncrementalVideoStitcher:
         source_total = getattr(loop, 'global_source_frame_count', 1)
         is_final_chunk = getattr(loop, 'global_is_final_chunk', False)
 
-        if is_final_chunk or loop.global_accumulated_frames >= source_total:
+        has_more_batches = getattr(loop, 'global_has_more_batches', False)
+        is_current_final = is_final_chunk or loop.global_accumulated_frames >= source_total
+        is_absolute_final = is_current_final and not has_more_batches
+
+        if is_current_final:
             _log(f"   -> 🏁 ¡Último ciclo detectado! Ensamblando recursos desde la caché temporal...")
 
             # 1. ENSAMBLAR VÍDEO
             png_files = sorted([f for f in os.listdir(cache_dir) if f.endswith('.png')])
             if not png_files:
                 _log("   -> ❌ ERROR: No se encontraron frames en la subcarpeta.")
-                return (images, audio, True, "\n".join(log_output))
+                return (images, audio, True, is_absolute_final, "\n".join(log_output))
 
             total_frames = len(png_files)
             _log(f"   -> 🧩 Extrayendo {total_frames} frames en paralelo...")
@@ -798,11 +802,11 @@ class IncrementalVideoStitcher:
             except:
                 pass
 
-            return (final_tensor, final_audio, True, "\n".join(log_output))
+            return (final_tensor, final_audio, True, is_absolute_final, "\n".join(log_output))
         else:
             _log(f"   -> ⏳ Ciclo intermedio. Recursos almacenados de forma segura. Pasando frames dummy...")
             dummy_frame = images[-1:].clone()
-            return (dummy_frame, None, False, "\n".join(log_output))
+            return (dummy_frame, None, False, False, "\n".join(log_output))
 
 @register_node
 class AutoLoopCalculatorWan:
