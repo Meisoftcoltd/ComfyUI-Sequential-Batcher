@@ -464,3 +464,88 @@ class SequentialLoopTrigger:
 
         print(f"{'='*50}\n")
         return ()
+
+@register_node
+class SequentialAudioBatchLoader:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "folder_path": ("STRING", {"forceInput": True}),
+                "current_loop_index": ("INT", {"forceInput": True}),
+            }
+        }
+
+    RETURN_TYPES = ("AUDIO", "STRING", "INT", "INT", "STRING")
+    RETURN_NAMES = ("AUDIO", "current_file_name", "current_index", "total_files", "log")
+    FUNCTION = "load_audio"
+    CATEGORY = "🔁 Sequential Batcher/Audio"
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        import time
+        return time.time()
+
+    def load_audio(self, folder_path, current_loop_index):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
+
+        import os
+        import torch
+        from .video import extract_and_standardize_audio
+
+        _log(f"\n📂 [Audio Batch Loader] Buscando audios en: {folder_path}")
+
+        valid_extensions = ('.mp3', '.wav', '.ogg', '.flac', '.m4a')
+        audio_files = []
+
+        if os.path.isdir(folder_path):
+            all_files = os.listdir(folder_path)
+            audio_files = [f for f in all_files if f.lower().endswith(valid_extensions)]
+            audio_files.sort()
+        else:
+            _log(f"   -> ❌ ERROR: La ruta no es un directorio válido.")
+
+        total_files = len(audio_files)
+
+        if total_files == 0:
+            _log(f"   -> ⚠️ ATENCIÓN: Carpeta vacía o sin audios válidos. Devolviendo silencio.")
+            # Return silence
+            silent_waveform = torch.zeros((1, 2, int(0.1 * 44100)), dtype=torch.float32)
+            audio_dict = {"waveform": silent_waveform, "sample_rate": 44100}
+
+            from . import loop
+            loop.global_step_by_chunk = True
+            loop.global_source_frame_count = 1
+            loop.global_accumulated_frames = 1
+            loop.global_is_final_chunk = True
+            loop.global_has_more_batches = False
+
+            return (audio_dict, "empty_or_invalid_folder", 0, 1, "\n".join(log_output))
+
+        safe_index = min(current_loop_index, total_files - 1)
+        current_file_name = audio_files[safe_index]
+        audio_path = os.path.join(folder_path, current_file_name)
+
+        _log(f"   -> 🎵 Cargando archivo {safe_index + 1}/{total_files}: {current_file_name}")
+
+        try:
+            audio_dict = extract_and_standardize_audio(audio_path)
+        except Exception as e:
+            _log(f"   -> ❌ ERROR cargando audio: {e}. Devolviendo silencio.")
+            silent_waveform = torch.zeros((1, 2, int(0.1 * 44100)), dtype=torch.float32)
+            audio_dict = {"waveform": silent_waveform, "sample_rate": 44100}
+
+        # Actualizar variables globales del motor de bucles
+        from . import loop
+        loop.global_step_by_chunk = True
+        loop.global_source_frame_count = total_files
+        loop.global_accumulated_frames = safe_index + 1
+        loop.global_is_final_chunk = (safe_index + 1) >= total_files
+        loop.global_has_more_batches = False
+
+        _log(f"   -> ✅ Lote configurado: step_by_chunk={loop.global_step_by_chunk}, acumulado={loop.global_accumulated_frames}/{loop.global_source_frame_count}, is_final={loop.global_is_final_chunk}")
+
+        return (audio_dict, current_file_name, safe_index, total_files, "\n".join(log_output))
