@@ -544,8 +544,10 @@ class SequentialAudioBatchLoader:
         loop.global_source_frame_count = total_files
         loop.global_accumulated_frames = safe_index + 1
         loop.global_is_final_chunk = (safe_index + 1) >= total_files
-        loop.global_has_more_batches = False
 
-        _log(f"   -> ✅ Lote configurado: step_by_chunk={loop.global_step_by_chunk}, acumulado={loop.global_accumulated_frames}/{loop.global_source_frame_count}, is_final={loop.global_is_final_chunk}")
+        # 💡 FIX: Control dinámico de lotes basado en los archivos restantes
+        loop.global_has_more_batches = safe_index < (total_files - 1)
+
+        _log(f"   -> ✅ Lote configurado: step_by_chunk={loop.global_step_by_chunk}, acumulado={loop.global_accumulated_frames}/{loop.global_source_frame_count}, is_final={loop.global_is_final_chunk}, has_more_batches={loop.global_has_more_batches}")
 
         return (audio_dict, current_file_name, safe_index, total_files, "\n".join(log_output))
