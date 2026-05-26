@@ -748,6 +748,8 @@ class IncrementalVideoStitcher:
 
         has_more_batches = getattr(loop, 'global_has_more_batches', False)
         is_current_final = is_final_chunk or loop.global_accumulated_frames >= source_total
+
+        # 💡 NUEVA LÓGICA: Es el final absoluto solo si es el final del ciclo Y no hay más archivos en cola
         is_absolute_final = is_current_final and not has_more_batches
 
         if is_current_final:
@@ -802,10 +804,13 @@ class IncrementalVideoStitcher:
             except:
                 pass
 
+            # 💡 FIX: Retornar is_absolute_final en la penúltima posición
             return (final_tensor, final_audio, True, is_absolute_final, "\n".join(log_output))
         else:
             _log(f"   -> ⏳ Ciclo intermedio. Recursos almacenados de forma segura. Pasando frames dummy...")
             dummy_frame = images[-1:].clone()
+
+            # 💡 FIX: Retornar False tanto para is_final_cycle como is_absolute_final
             return (dummy_frame, None, False, False, "\n".join(log_output))
 
 @register_node
