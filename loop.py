@@ -153,9 +153,25 @@ class AutoLoopCalculatorTTSBatch:
         mode = split_mode[0] if isinstance(split_mode, list) else split_mode
         idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
 
+        # 💡 FIX: Detección inteligente de nuevos flujos mediante Hash
+        current_hash = hash(str(texts))
+        last_hash = getattr(loop, 'global_last_text_hash', None)
+
+        if idx == 0:
+            if current_hash != last_hash:
+                _log("   -> 🆕 Nuevo texto detectado. Forzando reinicio del lote (Batch) a 0.")
+                loop.global_batch_index = 0
+                loop.global_is_batch_advancing = False
+                loop.global_last_text_hash = current_hash
+            elif not getattr(loop, 'global_is_batch_advancing', False):
+                loop.global_batch_index = 0
+
         current_batch_idx = getattr(loop, 'global_batch_index', 0)
+
+        # Seguridad adicional por si el índice se desborda por cachés antiguos
         if current_batch_idx >= len(texts):
             current_batch_idx = len(texts) - 1
+            loop.global_batch_index = current_batch_idx
 
         current_file_text = texts[current_batch_idx]
         current_name = names[current_batch_idx] if current_batch_idx < len(names) else "unknown"
