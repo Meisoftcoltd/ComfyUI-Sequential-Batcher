@@ -33,6 +33,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "SequentialLoopStart": "🏁 Loop Start (Index)",
     "SequentialLoopTrigger": "🚀 Loop Trigger (Auto-Queue)",
     "SequentialAudioBatchLoader": "🎵 Sequential Audio Batch Loader",
+    "DynamicSceneDirector": "🎬 Dynamic Scene Director",
     # Tools
     "AutoFPSLimiter": "⏱️ Auto FPS Limiter",
     "VAESafeFramePadder": "🛡️ VAE Safe Frame Padder",
