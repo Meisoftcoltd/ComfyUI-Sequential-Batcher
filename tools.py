@@ -377,3 +377,76 @@ class AudioDurationCalculator:
         _log(f"{'='*50}\n")
 
         return (duration, "\n".join(log_output))
+
+
+@register_node
+class PreciseAudioSlicer:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "audio": ("AUDIO",),
+                "skip_frames": ("INT", {"forceInput": True, "tooltip": "Frames que ya han pasado"}),
+                "chunk_frames": ("INT", {"forceInput": True, "tooltip": "Frames de este bloque"}),
+                "fps": ("FLOAT", {"default": 12.0, "min": 1.0, "max": 120.0, "step": 1.0}),
+            }
+        }
+
+    RETURN_TYPES = ("AUDIO", "STRING")
+    RETURN_NAMES = ("sliced_audio", "log")
+    FUNCTION = "slice_audio"
+    CATEGORY = "🔁 Sequential Batcher/Tools"
+
+    def slice_audio(self, audio, skip_frames, chunk_frames, fps):
+        log_output = []
+        def _log(msg):
+            print(msg)
+            log_output.append(str(msg))
+
+        _log(f"\n{'='*50}")
+        _log(f"✂️ [Secuencial Batcher] NODO: Precise Audio Slicer")
+
+        # 1. Validación defensiva de audio
+        if audio is None or not isinstance(audio, dict) or "waveform" not in audio:
+            _log("⚠️ ALERTA: Audio no válido o no conectado. Generando silencio...")
+            sample_rate = 44100
+            duration_sec = chunk_frames / fps
+            chunk_samples = int(duration_sec * sample_rate)
+            sliced_waveform = torch.zeros((1, 1, chunk_samples), dtype=torch.float32)
+            _log(f"{'='*50}\n")
+            return ({"waveform": sliced_waveform, "sample_rate": sample_rate}, "\n".join(log_output))
+
+        waveform = audio["waveform"]
+        sample_rate = audio.get("sample_rate", 44100)
+
+        # 1. Convertir frames a tiempo absoluto
+        start_sec = skip_frames / fps
+        duration_sec = chunk_frames / fps
+
+        # 2. Convertir tiempo a samples de audio exactos
+        start_sample = int(start_sec * sample_rate)
+        chunk_samples = int(duration_sec * sample_rate)
+        end_sample = start_sample + chunk_samples
+
+        total_samples = waveform.shape[-1]
+
+        _log(f"   -> Sincronizando audio ({chunk_frames} frames a {fps} FPS)")
+        _log(f"   -> Tramo de tiempo: {start_sec:.3f}s hasta {start_sec + duration_sec:.3f}s")
+
+        # 3. Cortar el tensor de audio con precisión matemática
+        if start_sample >= total_samples:
+            _log(f"   -> ⚠️ El tiempo de inicio supera el audio original. Generando silencio perfecto.")
+            sliced_waveform = torch.zeros((*waveform.shape[:-1], chunk_samples), dtype=waveform.dtype, device=waveform.device)
+        elif end_sample > total_samples:
+            _log(f"   -> ⚠️ El bloque excede el final del audio. Rellenando con silencio para mantener la sincronía...")
+            valid_audio = waveform[..., start_sample:total_samples]
+            padding_needed = end_sample - total_samples
+            pad_tensor = torch.zeros((*waveform.shape[:-1], padding_needed), dtype=waveform.dtype, device=waveform.device)
+            sliced_waveform = torch.cat([valid_audio, pad_tensor], dim=-1)
+        else:
+            _log(f"   -> ✅ Corte extraído con éxito ({chunk_samples} samples).")
+            sliced_waveform = waveform[..., start_sample:end_sample]
+
+        _log(f"{'='*50}\n")
+
+        return ({"waveform": sliced_waveform, "sample_rate": sample_rate}, "\n".join(log_output))
