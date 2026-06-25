@@ -567,3 +567,95 @@ class SequentialAudioBatchLoader:
         _log(f"   -> ✅ Lote configurado: step_by_chunk={loop.global_step_by_chunk}, acumulado={loop.global_accumulated_frames}/{loop.global_source_frame_count}, is_final={loop.global_is_final_chunk}, has_more_batches={loop.global_has_more_batches}")
 
         return (audio_dict, current_file_name, safe_index, total_files, "\n".join(log_output))
+
+import folder_paths
+import math
+
+@register_node
+class DynamicSceneDirector:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "agent_json": ("STRING", {"multiline": True, "default": '{"scenes": [{"scene_id": 1, "duration_seconds": 5.0, "flux_prompt": "A cinematic wide shot of a cyberpunk city...", "wan_prompt": "Camera pans slowly to the right, neon lights flickering."}]}'}),
+                "audio_filename": ("STRING", {"default": "audio_track"}),
+                "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000}),
+                "fps": ("INT", {"default": 24, "min": 8, "max": 60}),
+            }
+        }
+
+    RETURN_TYPES = ("BOOLEAN", "STRING", "STRING", "INT", "STRING")
+    RETURN_NAMES = ("is_flux_phase", "flux_prompt", "wan_prompt", "chunk_frames", "image_load_path")
+    FUNCTION = "direct_scene"
+    CATEGORY = "🔁 Sequential Batcher/Director"
+
+    def direct_scene(self, agent_json, audio_filename, current_loop_index, fps):
+        log_output = []
+        def _log(msg):
+            print(msg); log_output.append(str(msg))
+
+        _log(f"\n{'='*50}")
+        _log(f"🎬 [Director] Evaluando Ciclo: {current_loop_index}")
+
+        # 1. Parsear el JSON del Agente
+        try:
+            data = json.loads(agent_json)
+            scenes = data.get("scenes", [])
+        except Exception as e:
+            raise ValueError(f"❌ Error en el JSON del Agente: {e}")
+
+        total_scenes = len(scenes)
+        if total_scenes == 0:
+            raise ValueError("❌ El JSON no contiene escenas válidas.")
+
+        # 2. Crear el directorio blindado para este proyecto
+        base_output = folder_paths.get_output_directory()
+        safe_audio_name = "".join(c for c in audio_filename if c.isalnum() or c in " _-").strip()
+        if not safe_audio_name:
+            safe_audio_name = "proyecto_generico"
+
+        keyframes_dir = os.path.join(base_output, f"{safe_audio_name}_Keyframes")
+        os.makedirs(keyframes_dir, exist_ok=True)
+
+        # 3. LÓGICA DE FASES (FLUX vs WANVIDEO)
+        if current_loop_index < total_scenes:
+            # FASE 1: PRE-PRODUCCIÓN (FLUX)
+            scene = scenes[current_loop_index]
+            is_flux_phase = True
+            flux_prompt = scene.get("flux_prompt", "")
+            wan_prompt = ""
+            chunk_frames = 0
+
+            # Nombre de guardado para la imagen de FLUX
+            image_path = os.path.join(keyframes_dir, f"scene_{scene.get('scene_id', current_loop_index)}.png")
+
+            _log(f"   -> 📸 FASE 1 (Pre-Producción): Generando Keyframe para Escena {scene.get('scene_id', current_loop_index)}")
+            _log(f"   -> 💾 Destino del PNG: {image_path}")
+
+        else:
+            # FASE 2: RENDERIZADO (WANVIDEO)
+            is_flux_phase = False
+            video_loop_index = current_loop_index - total_scenes
+
+            # Límite de seguridad
+            if video_loop_index >= total_scenes:
+                video_loop_index = total_scenes - 1
+
+            scene = scenes[video_loop_index]
+            flux_prompt = ""
+            wan_prompt = scene.get("wan_prompt", "")
+
+            # Matemáticas de frames exactos
+            duration = scene.get("duration_seconds", 5.0)
+            chunk_frames = math.ceil(duration * fps)
+
+            # Ruta de donde WanVideo debe LEER la imagen inicial
+            image_path = os.path.join(keyframes_dir, f"scene_{scene.get('scene_id', video_loop_index)}.png")
+
+            _log(f"   -> 🎥 FASE 2 (Renderizado): Procesando Escena {scene.get('scene_id', video_loop_index)}")
+            _log(f"   -> ⏱️ Duración de vídeo: {duration}s ({chunk_frames} frames a {fps} FPS)")
+            _log(f"   -> 📥 Cargando Keyframe desde: {image_path}")
+
+        _log(f"{'='*50}\n")
+
+        return (is_flux_phase, flux_prompt, wan_prompt, chunk_frames, image_path)
