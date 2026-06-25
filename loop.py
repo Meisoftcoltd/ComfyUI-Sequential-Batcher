@@ -482,19 +482,79 @@ class SequentialLoopTrigger:
         return ()
 
 @register_node
-class SequentialAudioBatchLoader:
+class BatchAudioFolderLoader:
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "folder_path": ("STRING", {"forceInput": True}),
+                "folder_path": ("STRING", {"forceInput": True, "tooltip": "Conectar al output folder_path de Telegram WaitForMultipleFiles"}),
+            }
+        }
+
+    RETURN_TYPES = ("AUDIO_LIST", "STRING_LIST", "INT", "STRING")
+    RETURN_NAMES = ("audio_list", "file_names", "file_count", "log")
+    FUNCTION = "load_audios"
+    CATEGORY = "🔁 Sequential Batcher/Audio"
+
+    def load_audios(self, folder_path):
+        log_output = []
+        def _log(msg):
+            print(msg); log_output.append(str(msg))
+
+        import os
+        import torch
+        from .video import extract_and_standardize_audio
+
+        _log(f"\n📂 [Batch Audio Loader] Escaneando lote en: {folder_path}")
+
+        if not folder_path or not os.path.exists(folder_path):
+            _log("   -> ❌ ERROR: Directorio nulo o inexistente. Devolviendo silencio.")
+            silent = {"waveform": torch.zeros((1, 2, int(0.1 * 44100)), dtype=torch.float32), "sample_rate": 44100}
+            return ([silent], ["error_silence.ogg"], 0, "\n".join(log_output))
+
+        valid_extensions = ('.mp3', '.wav', '.ogg', '.flac', '.m4a')
+        files = sorted([f for f in os.listdir(folder_path) if f.lower().endswith(valid_extensions)])
+
+        if not files:
+            _log("   -> ⚠️ No se encontraron archivos de audio en el lote.")
+            silent = {"waveform": torch.zeros((1, 2, int(0.1 * 44100)), dtype=torch.float32), "sample_rate": 44100}
+            return ([silent], ["empty_silence.ogg"], 0, "\n".join(log_output))
+
+        audio_list = []
+        file_names = []
+
+        for f in files:
+            path = os.path.join(folder_path, f)
+            try:
+                _log(f"   -> 🎵 Cargando y estandarizando: {f}")
+                audio_dict = extract_and_standardize_audio(path)
+                audio_list.append(audio_dict)
+                file_names.append(f)
+            except Exception as e:
+                _log(f"   -> ❌ Error procesando {f}: {e}")
+
+        if not audio_list:
+            silent = {"waveform": torch.zeros((1, 2, int(0.1 * 44100)), dtype=torch.float32), "sample_rate": 44100}
+            return ([silent], ["error_silence.ogg"], 0, "\n".join(log_output))
+
+        _log(f"   -> ✅ Lote procesado: {len(audio_list)} audios listos en RAM.")
+        return (audio_list, file_names, len(audio_list), "\n".join(log_output))
+
+@register_node
+class AudioBatchSelector:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "audio_list": ("AUDIO_LIST", {"forceInput": True}),
+                "file_names": ("STRING_LIST", {"forceInput": True}),
                 "current_loop_index": ("INT", {"forceInput": True}),
             }
         }
 
-    RETURN_TYPES = ("AUDIO", "STRING", "INT", "INT", "STRING")
-    RETURN_NAMES = ("AUDIO", "current_file_name", "current_index", "total_files", "log")
-    FUNCTION = "load_audio"
+    RETURN_TYPES = ("AUDIO", "STRING", "STRING")
+    RETURN_NAMES = ("current_audio", "current_file_name", "log")
+    FUNCTION = "select"
     CATEGORY = "🔁 Sequential Batcher/Audio"
 
     @classmethod
@@ -502,71 +562,54 @@ class SequentialAudioBatchLoader:
         import time
         return time.time()
 
-    def load_audio(self, folder_path, current_loop_index):
+    def select(self, audio_list, file_names, current_loop_index):
         log_output = []
         def _log(msg):
-            print(msg)
-            log_output.append(str(msg))
+            print(msg); log_output.append(str(msg))
 
-        import os
-        import torch
-        from .video import extract_and_standardize_audio
-
-        _log(f"\n📂 [Audio Batch Loader] Buscando audios en: {folder_path}")
-
-        valid_extensions = ('.mp3', '.wav', '.ogg', '.flac', '.m4a')
-        audio_files = []
-
-        if os.path.isdir(folder_path):
-            all_files = os.listdir(folder_path)
-            audio_files = [f for f in all_files if f.lower().endswith(valid_extensions)]
-            audio_files.sort()
-        else:
-            _log(f"   -> ❌ ERROR: La ruta no es un directorio válido.")
-
-        total_files = len(audio_files)
-
-        if total_files == 0:
-            _log(f"   -> ⚠️ ATENCIÓN: Carpeta vacía o sin audios válidos. Devolviendo silencio.")
-            # Return silence
-            silent_waveform = torch.zeros((1, 2, int(0.1 * 44100)), dtype=torch.float32)
-            audio_dict = {"waveform": silent_waveform, "sample_rate": 44100}
-
-            from . import loop
-            loop.global_step_by_chunk = True
-            loop.global_source_frame_count = 1
-            loop.global_accumulated_frames = 1
-            loop.global_is_final_chunk = True
-            loop.global_has_more_batches = False
-
-            return (audio_dict, "empty_or_invalid_folder", 0, 1, "\n".join(log_output))
-
-        safe_index = min(current_loop_index, total_files - 1)
-        current_file_name = audio_files[safe_index]
-        audio_path = os.path.join(folder_path, current_file_name)
-
-        _log(f"   -> 🎵 Cargando archivo {safe_index + 1}/{total_files}: {current_file_name}")
-
-        try:
-            audio_dict = extract_and_standardize_audio(audio_path)
-        except Exception as e:
-            _log(f"   -> ❌ ERROR cargando audio: {e}. Devolviendo silencio.")
-            silent_waveform = torch.zeros((1, 2, int(0.1 * 44100)), dtype=torch.float32)
-            audio_dict = {"waveform": silent_waveform, "sample_rate": 44100}
-
-        # Actualizar variables globales del motor de bucles
         from . import loop
-        loop.global_step_by_chunk = True
-        loop.global_source_frame_count = total_files
-        loop.global_accumulated_frames = safe_index + 1
-        loop.global_is_final_chunk = (safe_index + 1) >= total_files
 
-        # 💡 FIX: Control dinámico de lotes basado en los archivos restantes
-        loop.global_has_more_batches = safe_index < (total_files - 1)
+        # Normalización de listas
+        audios = audio_list if isinstance(audio_list, list) else [audio_list]
+        names = file_names if isinstance(file_names, list) else [file_names]
 
-        _log(f"   -> ✅ Lote configurado: step_by_chunk={loop.global_step_by_chunk}, acumulado={loop.global_accumulated_frames}/{loop.global_source_frame_count}, is_final={loop.global_is_final_chunk}, has_more_batches={loop.global_has_more_batches}")
+        if len(audios) == 1 and isinstance(audios[0], list): audios = audios[0]
+        if len(names) == 1 and isinstance(names[0], list): names = names[0]
 
-        return (audio_dict, current_file_name, safe_index, total_files, "\n".join(log_output))
+        idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
+
+        current_hash = hash(str(names))
+        last_hash = getattr(loop, 'global_last_audio_hash', None)
+
+        if idx == 0:
+            if current_hash != last_hash:
+                _log("   -> 🆕 Nuevo lote de audios detectado. Reiniciando Batch a 0.")
+                loop.global_batch_index = 0
+                loop.global_is_batch_advancing = False
+                loop.global_last_audio_hash = current_hash
+            elif not getattr(loop, 'global_is_batch_advancing', False):
+                loop.global_batch_index = 0
+
+        current_batch_idx = getattr(loop, 'global_batch_index', 0)
+
+        if current_batch_idx >= len(audios):
+            current_batch_idx = len(audios) - 1
+            loop.global_batch_index = current_batch_idx
+
+        current_audio = audios[current_batch_idx]
+        current_name = names[current_batch_idx]
+
+        # Control de comunicación con el Trigger final
+        loop.global_has_more_batches = (current_batch_idx < len(audios) - 1)
+
+        _log(f"\n{'='*50}")
+        _log(f"🎛️ [Secuencial Batcher] NODO: Audio Batch Selector")
+        _log(f"   -> Archivo activo: {current_batch_idx + 1} de {len(audios)}")
+        _log(f"   -> Nombre: {current_name}")
+        _log(f"   -> Quedan archivos en el lote: {'Sí' if loop.global_has_more_batches else 'No'}")
+        _log(f"{'='*50}\n")
+
+        return (current_audio, current_name, "\n".join(log_output))
 
 import folder_paths
 import math

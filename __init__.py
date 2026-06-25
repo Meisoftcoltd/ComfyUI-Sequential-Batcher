@@ -32,7 +32,8 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "AutoLoopCalculatorTTS": "📊 Auto Loop Calculator (TTS/Texto)",
     "SequentialLoopStart": "🏁 Loop Start (Index)",
     "SequentialLoopTrigger": "🚀 Loop Trigger (Auto-Queue)",
-    "SequentialAudioBatchLoader": "🎵 Sequential Audio Batch Loader",
+    "BatchAudioFolderLoader": "📂 Batch Audio Folder Loader",
+    "AudioBatchSelector": "🎛️ Audio Batch Selector",
     "DynamicSceneDirector": "🎬 Dynamic Scene Director",
     # Tools
     "AutoFPSLimiter": "⏱️ Auto FPS Limiter",
