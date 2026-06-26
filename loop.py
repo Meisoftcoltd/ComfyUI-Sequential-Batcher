@@ -775,7 +775,7 @@ class IncrementalVideoStitcher:
         if audio is not None:
             audio_path = os.path.join(cache_dir, f"audio_{idx:04d}_{timestamp}.safetensors")
             from safetensors.torch import save_file
-            save_file({"waveform": audio["waveform"], "sample_rate": torch.tensor(audio["sample_rate"], dtype=torch.int32)}, audio_path)
+            save_file({"waveform": audio["waveform"].contiguous(), "sample_rate": torch.tensor(audio["sample_rate"], dtype=torch.int32)}, audio_path)
 
         frames_accepted = images.shape[0]
         stride = getattr(loop, 'global_select_every_nth', 1)

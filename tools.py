@@ -435,6 +435,8 @@ class PreciseAudioSlicer:
         else:
             sliced_waveform = waveform[..., start_sample:end_sample]
 
+        sliced_waveform = sliced_waveform.contiguous()
+
         _log(f"{'='*50}\n")
         return ({"waveform": sliced_waveform, "sample_rate": sample_rate}, "\n".join(log_output))
 
