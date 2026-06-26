@@ -450,3 +450,132 @@ class PreciseAudioSlicer:
         _log(f"{'='*50}\n")
 
         return ({"waveform": sliced_waveform, "sample_rate": sample_rate}, "\n".join(log_output))
+
+@register_node
+class SaveSceneKeyframe:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "file_path": ("STRING", {"forceInput": True, "tooltip": "Ruta desde el Scene Director"})
+            }
+        }
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("file_path",)
+    OUTPUT_NODE = True
+    FUNCTION = "save"
+    CATEGORY = "🔁 Sequential Batcher/Tools"
+
+    def save(self, image, file_path):
+        import os
+        import numpy as np
+        from PIL import Image
+
+        img_array = 255. * image[0].cpu().numpy()
+        img = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
+
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        img.save(file_path)
+        print(f"💾 [Keyframe Saver] Guardado con éxito en: {file_path}")
+        return (file_path,)
+
+@register_node
+class LoadSceneKeyframe:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "file_path": ("STRING", {"forceInput": True})
+            }
+        }
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("IMAGE",)
+    FUNCTION = "load"
+    CATEGORY = "🔁 Sequential Batcher/Tools"
+
+    def load(self, file_path):
+        import os
+        import torch
+        import numpy as np
+        from PIL import Image, ImageOps
+
+        if not os.path.exists(file_path):
+            print(f"⚠️ [Keyframe Loader] Archivo no encontrado: {file_path}. Generando tensor negro de seguridad.")
+            return (torch.zeros((1, 512, 512, 3), dtype=torch.float32),)
+
+        img = Image.open(file_path)
+        img = ImageOps.exif_transpose(img)
+        img = img.convert("RGB")
+        img_tensor = torch.from_numpy(np.array(img).astype(np.float32) / 255.0).unsqueeze(0)
+        print(f"📥 [Keyframe Loader] Imagen cargada desde: {file_path}")
+        return (img_tensor,)
+
+@register_node
+class LTXVSingleFrameInjector:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "vae": ("VAE",),
+                "latent": ("LATENT",),
+                "image": ("IMAGE",),
+            }
+        }
+
+    RETURN_TYPES = ("LATENT",)
+    RETURN_NAMES = ("latent",)
+    FUNCTION = "inject"
+    CATEGORY = "🔁 Sequential Batcher/Tools"
+
+    def inject(self, vae, latent, image):
+        import torch
+        import comfy.utils
+
+        print(f"\n{'='*50}")
+        print(f"💉 [Secuencial Batcher] NODO: LTXV Single Frame Injector")
+
+        samples = latent["samples"].clone()
+
+        # Extraer factores de escala del VAE (Típicamente 8x32x32 para LTXV)
+        scale_factors = getattr(vae, "downscale_index_formula", (8, 32, 32))
+        height_scale_factor = scale_factors[1]
+        width_scale_factor = scale_factors[2]
+
+        batch, channels, latent_frames, latent_height, latent_width = samples.shape
+        width = latent_width * width_scale_factor
+        height = latent_height * height_scale_factor
+
+        if "noise_mask" in latent:
+            mask = latent["noise_mask"].clone()
+        else:
+            mask = torch.ones((batch, 1, latent_frames, 1, 1), dtype=torch.float32, device=samples.device)
+
+        print(f"   -> 📐 Adaptando resolución de la imagen ({image.shape[2]}x{image.shape[1]}) a la del Latent ({width}x{height})")
+
+        # Ajustar resolución de la imagen si no coincide con el latent
+        if image.shape[1] != height or image.shape[2] != width:
+            pixels = comfy.utils.common_upscale(image.movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
+        else:
+            pixels = image
+
+        encode_pixels = pixels[:, :, :, :3]
+
+        # Codificar imagen usando el VAE de LTX
+        t = vae.encode(encode_pixels)
+
+        # Compatibilidad 4D a 5D (Si el VAE devuelve [B, C, H, W] lo pasamos a [B, C, T, H, W])
+        if len(t.shape) == 4:
+            t = t.unsqueeze(2)
+
+        latent_idx = 0
+        end_index = min(latent_idx + t.shape[2], latent_frames)
+
+        # Inyección directa
+        samples[:, :, latent_idx:end_index] = t[:, :, :end_index - latent_idx]
+        mask[:, :, latent_idx:end_index] = 0.0  # 0.0 significa "Proteger este frame del ruido"
+
+        print(f"   -> ✅ Imagen inyectada y sellada en el Frame 0 (Índice Latente {latent_idx}).")
+        print(f"{'='*50}\n")
+
+        return ({"samples": samples, "noise_mask": mask},)
