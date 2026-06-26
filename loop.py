@@ -427,7 +427,17 @@ class SequentialLoopTrigger:
                     if class_type == "MasterSwitch":
                         master_switches.append(inputs)
 
-                is_next_final = (global_accumulated_frames + estimated_chunk) >= global_source_frame_count
+                # 🛡️ Desempaquetado defensivo universal (Unwrapping de listas de ComfyUI)
+                _acc_frames = global_accumulated_frames[0] if isinstance(global_accumulated_frames, list) else global_accumulated_frames
+                _src_frames = global_source_frame_count[0] if isinstance(global_source_frame_count, list) else global_source_frame_count
+                _est_chunk = estimated_chunk[0] if isinstance(estimated_chunk, list) else estimated_chunk
+
+                # Asegurar casteo a enteros puros para evitar colisiones matemáticas en cualquier flujo
+                _acc_frames = int(_acc_frames) if _acc_frames is not None else 0
+                _src_frames = int(_src_frames) if _src_frames is not None else 0
+                _est_chunk = int(_est_chunk) if _est_chunk is not None else 0
+
+                is_next_final = (_acc_frames + _est_chunk) >= _src_frames
                 if is_final_chunk and has_more_batches:
                     is_next_final = False
 
