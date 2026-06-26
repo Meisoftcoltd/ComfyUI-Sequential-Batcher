@@ -623,10 +623,10 @@ class DynamicSceneDirector:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "agent_json": ("STRING", {"multiline": True, "default": '{"scenes": [{"scene_id": 1, "duration_seconds": 5.0, "flux_prompt": "A cinematic wide shot of a cyberpunk city...", "wan_prompt": "Camera pans slowly to the right, neon lights flickering."}]}'}),
+                "agent_json": ("STRING", {"multiline": True, "default": '{"scenes": [{"scene_id": 1, "duration_seconds": 5.0, "flux_prompt": "A cinematic wide shot...", "wan_prompt": "Camera pans..."}]}'}),
                 "audio_filename": ("STRING", {"default": "audio_track"}),
                 "current_loop_index": ("INT", {"default": 0, "min": 0, "max": 10000}),
-                "fps": ("INT", {"default": 24, "min": 8, "max": 60}),
+                "fps": ("INT", {"default": 12, "min": 8, "max": 60}),
             }
         }
 
@@ -637,71 +637,176 @@ class DynamicSceneDirector:
 
     def direct_scene(self, agent_json, audio_filename, current_loop_index, fps):
         log_output = []
-        def _log(msg):
-            print(msg); log_output.append(str(msg))
+        def _log(msg): print(msg); log_output.append(str(msg))
+        from . import loop
+        import os, folder_paths, json, math
+
+        idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
 
         _log(f"\n{'='*50}")
-        _log(f"🎬 [Director] Evaluando Ciclo: {current_loop_index}")
+        _log(f"🎬 [Director] Evaluando Ciclo: {idx}")
 
-        # 1. Parsear el JSON del Agente
         try:
             data = json.loads(agent_json)
             scenes = data.get("scenes", [])
         except Exception as e:
-            raise ValueError(f"❌ Error en el JSON del Agente: {e}")
+            raise ValueError(f"❌ Error en JSON: {e}")
 
         total_scenes = len(scenes)
-        if total_scenes == 0:
-            raise ValueError("❌ El JSON no contiene escenas válidas.")
+        if total_scenes == 0: raise ValueError("❌ JSON sin escenas.")
 
-        # 2. Crear el directorio blindado para este proyecto
-        base_output = folder_paths.get_output_directory()
-        safe_audio_name = "".join(c for c in audio_filename if c.isalnum() or c in " _-").strip()
-        if not safe_audio_name:
-            safe_audio_name = "proyecto_generico"
+        # 🧠 NUEVA MÁQUINA DE ESTADOS (Por Escena y Chunks)
+        if idx == 0:
+            loop.global_current_scene_index = 0
+            loop.global_accumulated_frames = 0
+            loop.global_audio_offset_frames = 0
+            loop.global_is_flux_phase = True
+            loop.global_is_final_chunk = False
+            _log("   -> 🆕 Inicio de Proyecto. Estado reseteado.")
 
+        elif getattr(loop, 'global_is_final_chunk', False) and not getattr(loop, 'global_is_flux_phase', False):
+            loop.global_audio_offset_frames = getattr(loop, 'global_audio_offset_frames', 0) + getattr(loop, 'global_source_frame_count', 0)
+            loop.global_current_scene_index = getattr(loop, 'global_current_scene_index', 0) + 1
+            loop.global_accumulated_frames = 0
+            loop.global_is_flux_phase = True
+            loop.global_is_final_chunk = False
+            _log("   -> ⏭️ Escena terminada. Avanzando a la siguiente escena del guion.")
+        else:
+            loop.global_is_flux_phase = False
+
+        scene_idx = getattr(loop, 'global_current_scene_index', 0)
+
+        if scene_idx >= total_scenes:
+            scene_idx = total_scenes - 1
+            loop.global_is_absolute_video_final = True
+        else:
+            loop.global_is_absolute_video_final = False
+
+        scene = scenes[scene_idx]
+        is_flux_phase = loop.global_is_flux_phase
+
+        base_output = folder_paths.get_temp_directory()
+        safe_audio_name = "".join(c for c in audio_filename if c.isalnum() or c in " _-").strip() or "proyecto"
         keyframes_dir = os.path.join(base_output, f"{safe_audio_name}_Keyframes")
         os.makedirs(keyframes_dir, exist_ok=True)
 
-        # 3. LÓGICA DE FASES (FLUX vs WANVIDEO)
-        if current_loop_index < total_scenes:
-            # FASE 1: PRE-PRODUCCIÓN (FLUX)
-            scene = scenes[current_loop_index]
-            is_flux_phase = True
-            flux_prompt = scene.get("flux_prompt", "")
-            wan_prompt = ""
-            chunk_frames = 0
+        image_path = os.path.join(keyframes_dir, f"scene_{scene.get('scene_id', scene_idx)}.png")
 
-            # Nombre de guardado para la imagen de FLUX
-            image_path = os.path.join(keyframes_dir, f"scene_{scene.get('scene_id', current_loop_index)}.png")
+        flux_prompt = scene.get("flux_prompt", "") if is_flux_phase else ""
+        wan_prompt = scene.get("wan_prompt", "") if not is_flux_phase else ""
+        duration = scene.get("duration_seconds", 5.0)
+        chunk_frames = math.ceil(duration * fps)
 
-            _log(f"   -> 📸 FASE 1 (Pre-Producción): Generando Keyframe para Escena {scene.get('scene_id', current_loop_index)}")
-            _log(f"   -> 💾 Destino del PNG: {image_path}")
+        loop.global_source_frame_count = chunk_frames
 
+        if is_flux_phase:
+            _log(f"   -> 📸 FASE 1 (FLUX): Keyframe para Escena {scene_idx + 1}/{total_scenes}")
         else:
-            # FASE 2: RENDERIZADO (WANVIDEO)
-            is_flux_phase = False
-            video_loop_index = current_loop_index - total_scenes
-
-            # Límite de seguridad
-            if video_loop_index >= total_scenes:
-                video_loop_index = total_scenes - 1
-
-            scene = scenes[video_loop_index]
-            flux_prompt = ""
-            wan_prompt = scene.get("wan_prompt", "")
-
-            # Matemáticas de frames exactos
-            duration = scene.get("duration_seconds", 5.0)
-            chunk_frames = math.ceil(duration * fps)
-
-            # Ruta de donde WanVideo debe LEER la imagen inicial
-            image_path = os.path.join(keyframes_dir, f"scene_{scene.get('scene_id', video_loop_index)}.png")
-
-            _log(f"   -> 🎥 FASE 2 (Renderizado): Procesando Escena {scene.get('scene_id', video_loop_index)}")
-            _log(f"   -> ⏱️ Duración de vídeo: {duration}s ({chunk_frames} frames a {fps} FPS)")
-            _log(f"   -> 📥 Cargando Keyframe desde: {image_path}")
+            _log(f"   -> 🎥 FASE 2 (LTX): Renderizando Escena {scene_idx + 1}/{total_scenes} ({duration}s)")
 
         _log(f"{'='*50}\n")
-
         return (is_flux_phase, flux_prompt, wan_prompt, chunk_frames, image_path)
+
+@register_node
+class IncrementalVideoStitcher:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "images": ("IMAGE",),
+                "audio": ("AUDIO",),
+                "current_loop_index": ("INT", {"default": 0}),
+            },
+            "optional": {
+                "is_flux_phase": ("BOOLEAN", {"forceInput": True, "default": False}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "AUDIO", "BOOLEAN", "BOOLEAN", "STRING")
+    RETURN_NAMES = ("ALL_IMAGES", "AUDIO_OUT", "IS_FINAL_CYCLE", "IS_ABSOLUTE_FINAL", "log")
+    FUNCTION = "stitch"
+    CATEGORY = "🔁 Sequential Batcher/Video"
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        import time; return time.time()
+
+    def stitch(self, images, audio, current_loop_index, is_flux_phase=False):
+        log_output = []
+        def _log(msg): print(msg); log_output.append(str(msg))
+        from . import loop
+        import os, folder_paths, torch, shutil, time
+        from PIL import Image
+        import numpy as np
+        from concurrent.futures import ThreadPoolExecutor
+
+        idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
+        cache_dir = os.path.join(folder_paths.get_temp_directory(), "meisoft_video_cache")
+
+        if idx == 0:
+            if os.path.exists(cache_dir): shutil.rmtree(cache_dir, ignore_errors=True)
+            os.makedirs(cache_dir, exist_ok=True)
+            _log(f"\n🧹 [Stitcher] Ciclo 0 detectado. Caché general limpiada.")
+        else:
+            os.makedirs(cache_dir, exist_ok=True)
+
+        if is_flux_phase:
+            _log("   -> 📸 Fase 1 activa. Ignorando imagen para la caché de vídeo.")
+            return (images[-1:].clone(), audio, False, False, "\n".join(log_output))
+
+        timestamp = int(time.time() * 1000)
+
+        for i in range(images.shape[0]):
+            filename = f"frame_{idx:04d}_{timestamp}_{i:04d}.png"
+            path = os.path.join(cache_dir, filename)
+            img_array = 255. * images[i].cpu().numpy()
+            Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8)).save(path, format="PNG")
+
+        if audio is not None:
+            audio_path = os.path.join(cache_dir, f"audio_{idx:04d}_{timestamp}.safetensors")
+            from safetensors.torch import save_file
+            save_file({"waveform": audio["waveform"], "sample_rate": torch.tensor(audio["sample_rate"], dtype=torch.int32)}, audio_path)
+
+        frames_accepted = images.shape[0]
+        stride = getattr(loop, 'global_select_every_nth', 1)
+        ltx_mode = getattr(loop, 'global_ltx_mode', False)
+        advanced_frames = max(1, (frames_accepted - 1) * stride) if ltx_mode else frames_accepted * stride
+        loop.global_accumulated_frames += advanced_frames
+
+        is_absolute_final = getattr(loop, 'global_is_absolute_video_final', False) and getattr(loop, 'global_is_final_chunk', False)
+        has_more_batches = getattr(loop, 'global_has_more_batches', False)
+
+        if is_absolute_final:
+            _log(f"   -> 🏁 ¡Guion Completo! Ensamblando todas las escenas juntas...")
+            png_files = sorted([f for f in os.listdir(cache_dir) if f.endswith('.png')])
+            if not png_files: return (images, audio, True, True, "\n".join(log_output))
+
+            def load_and_process(filename):
+                img_np = np.array(Image.open(os.path.join(cache_dir, filename)).convert("RGB")).astype(np.float32) / 255.0
+                return torch.from_numpy(img_np).unsqueeze(0)
+
+            with ThreadPoolExecutor() as executor:
+                tensors_list = list(executor.map(load_and_process, png_files))
+
+            final_tensor = torch.cat(tensors_list, dim=0)
+
+            audio_files = sorted([f for f in os.listdir(cache_dir) if f.startswith('audio_') and f.endswith('.safetensors')])
+            final_audio = None
+            if audio_files:
+                waveforms = []
+                sample_rate = 44100
+                from safetensors.torch import load_file
+                for af in audio_files:
+                    chunk_audio = load_file(os.path.join(cache_dir, af))
+                    waveforms.append(chunk_audio["waveform"])
+                    sample_rate = chunk_audio["sample_rate"].item()
+                final_audio = {"waveform": torch.cat(waveforms, dim=-1), "sample_rate": sample_rate}
+            else:
+                final_audio = audio
+
+            try: shutil.rmtree(cache_dir)
+            except: pass
+
+            return (final_tensor, final_audio, True, not has_more_batches, "\n".join(log_output))
+        else:
+            return (images[-1:].clone(), None, False, False, "\n".join(log_output))
