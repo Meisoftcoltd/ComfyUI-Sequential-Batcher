@@ -44,7 +44,11 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "ResTool64x": "🎬 ResTool 64x (Hunyuan)",
     "ResTool64xLTX": "🌌 ResTool 64x (LTX 2.3)",
     "ConditionalAudioRouter": "🎛️ Conditional Audio Router (Bypass)",
+
     "PreciseAudioSlicer": "✂️ Precise Audio Slicer",
+    "SaveSceneKeyframe": "💾 Save Scene Keyframe",
+    "LoadSceneKeyframe": "🖼️ Load Scene Keyframe",
+    "LTXVSingleFrameInjector": "💉 LTXV Single Frame Injector",
 })
 
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
