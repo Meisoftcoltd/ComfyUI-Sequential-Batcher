@@ -552,8 +552,9 @@ class AudioBatchSelector:
             }
         }
 
-    RETURN_TYPES = ("AUDIO", "STRING", "STRING")
-    RETURN_NAMES = ("current_audio", "current_file_name", "log")
+    # 💡 AÑADIDOS LOS PINES PARA EL ÍNDICE DEL LOTE
+    RETURN_TYPES = ("AUDIO", "STRING", "INT", "INT", "STRING")
+    RETURN_NAMES = ("current_audio", "current_file_name", "batch_index", "total_batches", "log")
     FUNCTION = "select"
     CATEGORY = "🔁 Sequential Batcher/Audio"
 
@@ -598,18 +599,20 @@ class AudioBatchSelector:
 
         current_audio = audios[current_batch_idx]
         current_name = names[current_batch_idx]
+        total_audios = len(audios)
 
         # Control de comunicación con el Trigger final
-        loop.global_has_more_batches = (current_batch_idx < len(audios) - 1)
+        loop.global_has_more_batches = (current_batch_idx < total_audios - 1)
 
         _log(f"\n{'='*50}")
         _log(f"🎛️ [Secuencial Batcher] NODO: Audio Batch Selector")
-        _log(f"   -> Archivo activo: {current_batch_idx + 1} de {len(audios)}")
-        _log(f"   -> Nombre: {current_name}")
+        _log(f"   -> Lote (Batch) Actual: {current_batch_idx + 1} de {total_audios}")
+        _log(f"   -> Ciclo interno del video: {idx}")
+        _log(f"   -> Archivo activo: {current_name}")
         _log(f"   -> Quedan archivos en el lote: {'Sí' if loop.global_has_more_batches else 'No'}")
         _log(f"{'='*50}\n")
 
-        return (current_audio, current_name, "\n".join(log_output))
+        return (current_audio, current_name, current_batch_idx, total_audios, "\n".join(log_output))
 
 import folder_paths
 import math
