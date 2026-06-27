@@ -49,6 +49,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "SaveSceneKeyframe": "💾 Save Scene Keyframe",
     "LoadSceneKeyframe": "🖼️ Load Scene Keyframe",
     "LTXVSingleFrameInjector": "💉 LTXV Single Frame Injector",
+    "Meisoft_LazyGate": "🚦 Meisoft Lazy Gate",
 })
 
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']

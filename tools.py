@@ -2,7 +2,12 @@ import math
 import time
 import torch
 from . import register_node
-from .switch_node import any_type
+class AnyType(str):
+    def __ne__(self, __value: object) -> bool:
+        return False
+
+any_type = AnyType("*")
+
 
 @register_node
 class PrimitiveDelay:
@@ -460,7 +465,10 @@ class SaveSceneKeyframe:
     CATEGORY = "🔁 Sequential Batcher/Tools"
 
     def save(self, image, file_path, is_flux_phase=True):
-        if not is_flux_phase:
+        # 🛡️ FIX: Asegurar que is_flux_phase sea un booleano real
+        is_flux_bool = str(is_flux_phase).strip().lower() in ["true", "1", "t", "yes", "y"]
+
+        if not is_flux_bool:
             return (image, file_path) # Bypass silencioso en Fase 2
 
         import os, numpy as np
@@ -573,3 +581,37 @@ class LTXVSingleFrameInjector:
         print(f"{'='*50}\n")
 
         return ({"samples": samples, "noise_mask": mask},)
+
+@register_node(display_name="🚦 Meisoft Lazy Gate")
+class Meisoft_LazyGate:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "is_flux_phase": ("BOOLEAN", {"forceInput": True, "tooltip": "Conectar al Director"}),
+            },
+            "optional": {
+                "flux_branch": (any_type,),
+                "ltx_branch": (any_type,),
+            }
+        }
+
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("active_branch",)
+    FUNCTION = "route"
+    CATEGORY = "🔁 Sequential Batcher/Logic"
+
+    # 🛡️ LA MAGIA: ComfyUI solo evaluará la rama que devolvamos aquí. La otra se cancela.
+    def check_lazy_status(self, is_flux_phase, flux_branch=None, ltx_branch=None):
+        is_flux = str(is_flux_phase).strip().lower() in ["true", "1", "t", "yes", "y"]
+        if is_flux:
+            return ["flux_branch"]
+        else:
+            return ["ltx_branch"]
+
+    def route(self, is_flux_phase, flux_branch=None, ltx_branch=None):
+        is_flux = str(is_flux_phase).strip().lower() in ["true", "1", "t", "yes", "y"]
+        if is_flux:
+            return (flux_branch,)
+        else:
+            return (ltx_branch,)

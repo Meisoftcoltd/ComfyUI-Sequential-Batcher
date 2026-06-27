@@ -744,6 +744,9 @@ class IncrementalVideoStitcher:
     def stitch(self, images, audio, current_loop_index, is_flux_phase=False):
         log_output = []
         def _log(msg): print(msg); log_output.append(str(msg))
+
+        # 🛡️ FIX: Asegurar que is_flux_phase sea un booleano real
+        is_flux_bool = str(is_flux_phase).strip().lower() in ["true", "1", "t", "yes", "y"]
         from . import loop
         import os, folder_paths, torch, shutil, time
         from PIL import Image
@@ -760,7 +763,7 @@ class IncrementalVideoStitcher:
         else:
             os.makedirs(cache_dir, exist_ok=True)
 
-        if is_flux_phase:
+        if is_flux_bool:
             _log("   -> 📸 Fase 1 activa. Ignorando imagen para la caché de vídeo.")
             return (images[-1:].clone(), audio, False, False, "\n".join(log_output))
 
