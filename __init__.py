@@ -52,4 +52,8 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "Meisoft_LazyGate": "🚦 Meisoft Lazy Gate",
 })
 
+NODE_CLASS_MAPPINGS.update({
+    "Meisoft_LazyGate": tools.Meisoft_LazyGate,
+})
+
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']

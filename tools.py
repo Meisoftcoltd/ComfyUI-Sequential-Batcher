@@ -582,7 +582,6 @@ class LTXVSingleFrameInjector:
 
         return ({"samples": samples, "noise_mask": mask},)
 
-@register_node(display_name="🚦 Meisoft Lazy Gate")
 class Meisoft_LazyGate:
     @classmethod
     def INPUT_TYPES(s):
