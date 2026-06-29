@@ -61,12 +61,10 @@ class SequentialLoopStart:
         except:
             system_port = 8188
 
-        if port != system_port:
-            print(f"   -> ⚠️ ATENCIÓN: El puerto de entrada ({port}) no coincide con el puerto del sistema ({system_port}).")
-            print(f"   -> 🔒 Por motivos de seguridad (Prevención SSRF), se forzará el puerto real del sistema: {system_port}.")
-            safe_port = system_port
-
-            safe_port = system_port
+        safe_port = system_port
+        if port != safe_port:
+            print(f"   -> ⚠️ ATENCIÓN: El puerto de entrada ({port}) no coincide con el puerto del sistema ({safe_port}).")
+            print(f"   -> 🔒 Por motivos de seguridad (Prevención SSRF), se forzará el puerto real del sistema: {safe_port}.")
 
         print(f"   -> 📡 Verificando conexión con ComfyUI en el puerto seguro {safe_port}...")
         max_retries = 3
