@@ -48,12 +48,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "PreciseAudioSlicer": "✂️ Precise Audio Slicer",
     "SaveSceneKeyframe": "💾 Save Scene Keyframe",
     "LoadSceneKeyframe": "🖼️ Load Scene Keyframe",
-    "LTXVSingleFrameInjector": "💉 LTXV Single Frame Injector",
-    "Meisoft_LazyGate": "🚦 Meisoft Lazy Gate",
-})
-
-NODE_CLASS_MAPPINGS.update({
-    "Meisoft_LazyGate": tools.Meisoft_LazyGate,
+    "LTXVSingleFrameInjector": "💉 LTXV Single Frame Injector"
 })
 
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']

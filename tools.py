@@ -453,9 +453,6 @@ class SaveSceneKeyframe:
             "required": {
                 "image": ("IMAGE",),
                 "file_path": ("STRING", {"forceInput": True}),
-            },
-            "optional": {
-                "is_flux_phase": ("BOOLEAN", {"forceInput": True, "default": True})
             }
         }
     RETURN_TYPES = ("IMAGE", "STRING")
@@ -464,12 +461,7 @@ class SaveSceneKeyframe:
     FUNCTION = "save"
     CATEGORY = "🔁 Sequential Batcher/Tools"
 
-    def save(self, image, file_path, is_flux_phase=True):
-        # 🛡️ FIX: Asegurar que is_flux_phase sea un booleano real
-        is_flux_bool = str(is_flux_phase).strip().lower() in ["true", "1", "t", "yes", "y"]
-
-        if not is_flux_bool:
-            return (image, file_path) # Bypass silencioso en Fase 2
+    def save(self, image, file_path):
 
         import os, numpy as np
         from PIL import Image
@@ -582,35 +574,3 @@ class LTXVSingleFrameInjector:
 
         return ({"samples": samples, "noise_mask": mask},)
 
-class Meisoft_LazyGate:
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "is_flux_phase": ("BOOLEAN", {"forceInput": True, "tooltip": "Conectar al Director"}),
-            },
-            "optional": {
-                "flux_branch": (any_type,),
-                "ltx_branch": (any_type,),
-            }
-        }
-
-    RETURN_TYPES = (any_type,)
-    RETURN_NAMES = ("active_branch",)
-    FUNCTION = "route"
-    CATEGORY = "🔁 Sequential Batcher/Logic"
-
-    # 🛡️ LA MAGIA: ComfyUI solo evaluará la rama que devolvamos aquí. La otra se cancela.
-    def check_lazy_status(self, is_flux_phase, flux_branch=None, ltx_branch=None):
-        is_flux = str(is_flux_phase).strip().lower() in ["true", "1", "t", "yes", "y"]
-        if is_flux:
-            return ["flux_branch"]
-        else:
-            return ["ltx_branch"]
-
-    def route(self, is_flux_phase, flux_branch=None, ltx_branch=None):
-        is_flux = str(is_flux_phase).strip().lower() in ["true", "1", "t", "yes", "y"]
-        if is_flux:
-            return (flux_branch,)
-        else:
-            return (ltx_branch,)
