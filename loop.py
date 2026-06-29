@@ -65,7 +65,7 @@ class SequentialLoopStart:
             print(f"   -> ⚠️ ATENCIÓN: El puerto de entrada ({port}) no coincide con el puerto del sistema ({system_port}).")
             print(f"   -> 🔒 Por motivos de seguridad (Prevención SSRF), se forzará el puerto real del sistema: {system_port}.")
             safe_port = system_port
-        else:
+
             safe_port = system_port
 
         print(f"   -> 📡 Verificando conexión con ComfyUI en el puerto seguro {safe_port}...")
@@ -81,7 +81,7 @@ class SequentialLoopStart:
                 if attempt < max_retries - 1:
                     print(f"   -> ⏳ Reintentando conexión ({attempt + 1}/{max_retries}) por alta carga del servidor...")
                     time.sleep(1)
-                else:
+
                     error_msg = f"🚨 FATAL ERROR: EL PUERTO {safe_port} NO RESPONDE TRAS VARIOS INTENTOS. El servidor ComfyUI podría estar bloqueado o apagado. (Error original: {e})"
                     print(f"   -> ❌ {error_msg}")
                     raise RuntimeError(error_msg)
@@ -101,7 +101,7 @@ class SequentialLoopStart:
             global_ltx_mode = False
             print("   -> 🔄 Bucle y Acumulador reiniciados a 0.")
             # HACK: Mantenemos global_is_batch_advancing = True durante el ciclo 0
-        else:
+
             global_loop_index = loop_idx
             # Lo apagamos a partir del ciclo 1
             global_is_batch_advancing = False
@@ -191,7 +191,7 @@ class AutoLoopCalculatorTTSBatch:
                 if raw_chunks: raw_chunks[-1] += " " + buffer_text
                 else: raw_chunks.append(buffer_text)
             chunk_type_name = "Frases Optimizadas"
-        else:
+
             raw_chunks = [p.strip() for p in current_file_text.split('\n') if p.strip()]
             chunk_type_name = "Párrafos"
 
@@ -263,7 +263,7 @@ class AutoLoopCalculatorLTX:
 
         if potential_effective_frames < 9:
             safe_effective_frames = 9
-        else:
+
             safe_effective_frames = ((potential_effective_frames + 6) // 8) * 8 + 1
 
         # 🚀 FIX: Conservamos el límite FÍSICO real del vídeo para el timeline global
@@ -282,7 +282,7 @@ class AutoLoopCalculatorLTX:
         print(f"   -> 🎞️ Capacidad del video original: {potential_effective_frames} frames (Nth: {select_every_nth})")
         if effective_padding > 0:
             print(f"   -> 🛡️ Ajuste VAE: Se pedirán {safe_effective_frames} frames (Acolchado técnico: Se rellenarán {effective_padding} frames)")
-        else:
+
             print(f"   -> ✅ Ajuste VAE: Perfecto. Regla 8n+1 detectada.")
 
         print(f"   -> 📊 Timeline final: 0 a {physical_source_frame_count} (Límite Físico Real)")
@@ -308,7 +308,7 @@ class AutoLoopCalculatorLTX:
         if frames_left <= equitable_target:
             best_cut = physical_source_frame_count
             print(f"   -> 🧮 Absorbiendo resto final: meta fijada en frame {best_cut}")
-        else:
+
             if scene_cuts_list and len(scene_cuts_list) > 0:
                 future_cuts = [c for c in scene_cuts_list if c > current_pos]
                 if future_cuts:
@@ -319,10 +319,10 @@ class AutoLoopCalculatorLTX:
                         if safe_chunk_from_scene < 9: safe_chunk_from_scene = 9
                         best_cut = current_pos + (safe_chunk_from_scene * select_every_nth)
                         print(f"   -> 🎬 Bucle aislado por escena (Ajustado x8). Cortando en el frame: {best_cut} (Corte real: {next_cut})")
-                    else:
+
                         best_cut = ideal_cut
                         print(f"   -> ⚠️ Toma demasiado larga para la VRAM. Cortando por límite técnico en: {best_cut} (El plano real acaba en {next_cut})")
-                else:
+
                     best_cut = ideal_cut
                     print(f"   -> 🎬 No quedan cortes de cámara por delante. Forzando corte final por VRAM en: {ideal_cut}")
             elif safe_faces_list and len(safe_faces_list) > 0:
@@ -332,7 +332,7 @@ class AutoLoopCalculatorLTX:
                 if safe_chunk_from_face < 9: safe_chunk_from_face = 9
                 best_cut = current_pos + (safe_chunk_from_face * select_every_nth)
                 print(f"   -> ✂️ Corte Facial Inteligente (Ajustado x8): {best_cut} (Meta equitativa: {ideal_cut})")
-            else:
+
                 best_cut = ideal_cut
                 print(f"   -> ⚖️ Sin detectores conectados. Forzando corte equitativo x8: {ideal_cut}")
 
@@ -345,7 +345,7 @@ class AutoLoopCalculatorLTX:
         if current_pos + (effective_chunk_frames * select_every_nth) >= physical_source_frame_count:
             print(f"   -> 🏁 Chunk final LTX detectado. Ajustando a {effective_chunk_frames} frames para mantener regla 8n+1.")
             loop.global_is_final_chunk = True
-        else:
+
             loop.global_is_final_chunk = False
 
         skip_frames = current_pos
@@ -407,7 +407,7 @@ class SequentialLoopTrigger:
                     if not found_calculator and "AutoLoopCalculator" in class_type:
                         if "TTS" in class_type:
                             estimated_chunk = 1
-                        else:
+
                             estimated_chunk = inputs.get("target_frames_per_loop", 50)
                         found_calculator = True
 
@@ -420,7 +420,7 @@ class SequentialLoopTrigger:
                         if is_final_chunk and has_more_batches:
                             inputs["loop_idx"] = 0
                             inputs["reset_loop"] = True
-                        else:
+
                             inputs["loop_idx"] = next_loop
                             inputs["reset_loop"] = False
 
@@ -448,7 +448,7 @@ class SequentialLoopTrigger:
                     loop.global_batch_index = getattr(loop, 'global_batch_index', 0) + 1
                     loop.global_is_batch_advancing = True
                     print(f"   -> 📦 Archivo finalizado. Iniciando archivo {loop.global_batch_index + 1} del lote...")
-                else:
+
                     print(f"   -> ⚙️ Preparando Ciclo {next_loop}...")
 
             p = {"prompt": prompt}
@@ -465,7 +465,7 @@ class SequentialLoopTrigger:
             gc.collect()
             if torch.cuda.is_available(): torch.cuda.empty_cache()
 
-        else:
+
             print(f"   -> 🏁 ¡Generación Finalizada! Todos los archivos del lote completados.")
             # ... Mantener aquí el código existente de limpieza extrema de VRAM (mm.unload_all_models, malloc_trim, etc.) ...
             print(f"   -> 🧹 Iniciando vaciado automático de VRAM...")
@@ -640,8 +640,8 @@ class DynamicSceneDirector:
             }
         }
 
-    RETURN_TYPES = ("BOOLEAN", "STRING", "STRING", "INT", "STRING")
-    RETURN_NAMES = ("is_flux_phase", "flux_prompt", "wan_prompt", "chunk_frames", "image_load_path")
+    RETURN_TYPES = ("STRING", "STRING", "INT", "STRING")
+    RETURN_NAMES = ("flux_prompt", "wan_prompt", "chunk_frames", "image_load_path")
     FUNCTION = "direct_scene"
     CATEGORY = "🔁 Sequential Batcher/Director"
 
@@ -670,19 +670,16 @@ class DynamicSceneDirector:
             loop.global_current_scene_index = 0
             loop.global_accumulated_frames = 0
             loop.global_audio_offset_frames = 0
-            loop.global_is_flux_phase = True
             loop.global_is_final_chunk = False
             _log("   -> 🆕 Inicio de Proyecto. Estado reseteado.")
 
-        elif getattr(loop, 'global_is_final_chunk', False) and not getattr(loop, 'global_is_flux_phase', False):
+        elif getattr(loop, 'global_is_final_chunk', False):
             loop.global_audio_offset_frames = getattr(loop, 'global_audio_offset_frames', 0) + getattr(loop, 'global_source_frame_count', 0)
             loop.global_current_scene_index = getattr(loop, 'global_current_scene_index', 0) + 1
             loop.global_accumulated_frames = 0
-            loop.global_is_flux_phase = True
             loop.global_is_final_chunk = False
             _log("   -> ⏭️ Escena terminada. Avanzando a la siguiente escena del guion.")
-        else:
-            loop.global_is_flux_phase = False
+
 
         scene_idx = getattr(loop, 'global_current_scene_index', 0)
 
@@ -693,7 +690,6 @@ class DynamicSceneDirector:
             loop.global_is_absolute_video_final = False
 
         scene = scenes[scene_idx]
-        is_flux_phase = loop.global_is_flux_phase
 
         base_output = folder_paths.get_temp_directory()
         safe_audio_name = "".join(c for c in audio_filename if c.isalnum() or c in " _-").strip() or "proyecto"
@@ -702,20 +698,17 @@ class DynamicSceneDirector:
 
         image_path = os.path.join(keyframes_dir, f"scene_{scene.get('scene_id', scene_idx)}.png")
 
-        flux_prompt = scene.get("flux_prompt", "") if is_flux_phase else ""
-        wan_prompt = scene.get("wan_prompt", "") if not is_flux_phase else ""
+        flux_prompt = scene.get("flux_prompt", "")
+        wan_prompt = scene.get("wan_prompt", "")
         duration = scene.get("duration_seconds", 5.0)
         chunk_frames = math.ceil(duration * fps)
 
         loop.global_source_frame_count = chunk_frames
 
-        if is_flux_phase:
-            _log(f"   -> 📸 FASE 1 (FLUX): Keyframe para Escena {scene_idx + 1}/{total_scenes}")
-        else:
-            _log(f"   -> 🎥 FASE 2 (LTX): Renderizando Escena {scene_idx + 1}/{total_scenes} ({duration}s)")
+        _log(f"   -> 🎬 Procesando Escena {scene_idx + 1}/{total_scenes} ({duration}s)")
 
         _log(f"{'='*50}\n")
-        return (is_flux_phase, flux_prompt, wan_prompt, chunk_frames, image_path)
+        return (flux_prompt, wan_prompt, chunk_frames, image_path)
 
 @register_node
 class IncrementalVideoStitcher:
@@ -726,9 +719,6 @@ class IncrementalVideoStitcher:
                 "images": ("IMAGE",),
                 "audio": ("AUDIO",),
                 "current_loop_index": ("INT", {"default": 0}),
-            },
-            "optional": {
-                "is_flux_phase": ("BOOLEAN", {"forceInput": True, "default": False}),
             }
         }
 
@@ -741,12 +731,10 @@ class IncrementalVideoStitcher:
     def IS_CHANGED(cls, **kwargs):
         import time; return time.time()
 
-    def stitch(self, images, audio, current_loop_index, is_flux_phase=False):
+    def stitch(self, images, audio, current_loop_index):
         log_output = []
         def _log(msg): print(msg); log_output.append(str(msg))
 
-        # 🛡️ FIX: Asegurar que is_flux_phase sea un booleano real
-        is_flux_bool = str(is_flux_phase).strip().lower() in ["true", "1", "t", "yes", "y"]
         from . import loop
         import os, folder_paths, torch, shutil, time
         from PIL import Image
@@ -763,9 +751,6 @@ class IncrementalVideoStitcher:
         else:
             os.makedirs(cache_dir, exist_ok=True)
 
-        if is_flux_bool:
-            _log("   -> 📸 Fase 1 activa. Ignorando imagen para la caché de vídeo.")
-            return (images[-1:].clone(), audio, False, False, "\n".join(log_output))
 
         timestamp = int(time.time() * 1000)
 
@@ -814,12 +799,12 @@ class IncrementalVideoStitcher:
                     waveforms.append(chunk_audio["waveform"])
                     sample_rate = chunk_audio["sample_rate"].item()
                 final_audio = {"waveform": torch.cat(waveforms, dim=-1), "sample_rate": sample_rate}
-            else:
+
                 final_audio = audio
 
             try: shutil.rmtree(cache_dir)
             except: pass
 
             return (final_tensor, final_audio, True, not has_more_batches, "\n".join(log_output))
-        else:
+
             return (images[-1:].clone(), None, False, False, "\n".join(log_output))
