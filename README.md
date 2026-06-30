@@ -1,15 +1,9 @@
 # ♾️ ComfyUI Sequential Batcher
-**v1.6.0** | **VRAM-Optimized Generation** | **Recursive Self-Queuing** | **Perfect Audio Sync**
+**v0.8.3** | **VRAM-Optimized Generation** | **Recursive Self-Queuing** | **Perfect Audio Sync**
 
 Una suite de grado profesional de nodos personalizados para ComfyUI. Diseñada para sortear los límites extremos de VRAM en la generación de vídeo pesado (WanVideo, Hunyuan, LTX) mediante **Auto-Encolado Recursivo**, procesamiento autónomo lote por lote y gestión de memoria forense.
 
 > 🌍 **Read in English:** [README_EN.md](README_EN.md)
-
----
-
-## 🌟 Lo Nuevo en v1.6.0 (Perfect Sync Update)
-* **🛡️ VAE Safe Frame Padder (Hold Last Frame):** El motor ahora expande dinámicamente los tensores incompletos al final del vídeo. Si faltan frames para cumplir los estrictos requisitos de WanVideo (regla de `4n + 1`) o LTX (8n+1), clona el último fotograma de forma imperceptible. **Resultado: Cero cuelgues del VAE y 100% de sincronización de audio sin micro-cortes.**
-* **📈 Inversión Matemática a "Expansión":** Los calculadores `AutoLoopCalculatorWan` y `AutoLoopCalculatorLTX` ahora redondean el timeline de forma segura hacia arriba, garantizando fluidez total en ciclos intermedios.
 
 ---
 
@@ -25,7 +19,7 @@ Una suite de grado profesional de nodos personalizados para ComfyUI. Diseñada p
 
 ## ⚠️ Requisitos del Sistema (Crítico)
 
-Para que el nodo `VideoAnalyzerWithAudio` pueda desempaquetar contenedores `.mp4` y extraer el audio con `torchaudio`, **FFmpeg es absolutamente obligatorio**.
+Para que el nodo `VideoAnalyzerFaceDetector` pueda desempaquetar contenedores `.mp4` y extraer el audio con `torchaudio`, **FFmpeg es absolutamente obligatorio**.
 
 * **🐧 Ubuntu / Linux / WSL2:**
   El script intentará instalarlo por ti. Si falla, ejecuta manualmente:
@@ -43,16 +37,43 @@ El argumento `--highvram` le da la orden estricta a ComfyUI de mantener los mode
 ---
 
 ## 🧠 La Arquitectura Híbrida (Desglose de Nodos)
-El procesamiento se divide en roles altamente especializados:
 
-* **🕵️ Video Analyzer Face detector + Audio:** Escanea el vídeo vía OpenCV o mediante un modelo YOLO acelerado por GPU. Extrae rostros, el audio y el Frame de Referencia.
-* **📊 Auto Loop Calculator (Base / WanVideo / LTX):** Recibe la biometría y calcula las coordenadas de corte (chunk_frames, skip_frames).
-* **🛡️ VAE Safe Frame Padder:** Intercepta el tensor final de VHS y lo rellena ("acolcha") clonando el último frame si falta material, salvando al VAE de un colapso.
-* **🎞️ Incremental Auto-Stitcher:** Recoge los lotes renderizados y la pista de audio, cosiendo el vídeo final de forma progresiva en la carpeta temporal.
-* **📥 Receiver & 📤 Sender:** Retienen y transfieren el último keyframe válido a través de los ciclos para mantener la coherencia temporal.
-* **⏱️ Auto FPS Limiter:** Reduce los FPS inteligentemente garantizando que el audio y el movimiento mantengan una sincronización perfecta sin romper la VRAM.
-* **🔀 Master Switch (Evaluación Perezosa):** Amputa físicamente los cables de rutas inactivas en el JSON enviado a ComfyUI. Los nodos pesados que no se necesitan en un ciclo específico ni siquiera se cargan en memoria.
-* **🧹 VRAM Defragmenter:** Purga forense de memoria (Secuencia Sagrada) que limpia la caché de CUDA/MPS y fuerza al Garbage Collector entre ciclos pesados.
+El procesamiento se divide en roles altamente especializados, organizados en las siguientes categorías:
+
+### 🎼 Orquestación
+* **🏁 Loop Start (Index):** Inicia la secuencia de bucle y mantiene el índice actual.
+* **🚀 Loop Trigger (Auto-Queue):** Dispara la siguiente iteración de ComfyUI de manera autónoma hasta que se completa la tarea.
+
+### 🎬 Director / Storyboard
+* **🎬 Dynamic Scene Director:** Máquina de estados para orquestar metadatos (prompts, duraciones) en la preproducción (Split-Workflow).
+* **💾 Save Scene Keyframe / 🖼️ Load Scene Keyframe:** Guarda y carga los frames clave de la escena para mantener la continuidad entre flujos separados.
+
+### 📦 Lotes (Batches)
+* **📂 Batch Audio Folder Loader:** Carga dinámicamente carpetas enteras de archivos (ej. lotes de audio).
+* **🎛️ Audio Batch Selector:** Despacha los archivos del lote uno por uno sincronizándose con el bucle.
+
+### 🔬 Análisis y Cálculos
+* **🕵️ Video Analyzer Face detector + Audio:** Escanea el vídeo vía OpenCV/YOLO, extrayendo rostros, audio y frame de referencia.
+* **🎬 Video Analyzer Scene detector:** Detecta cortes de escena en los vídeos.
+* **📊 Auto Loop Calculators:** Nodos especializados (`Base`, `WanVideo`, `LTX`, `TTS`) que reciben metadatos y calculan matemáticamente las coordenadas de corte exactas (`chunk_frames`, `skip_frames`).
+
+### 🎞️ Video
+* **🎞️ Incremental Auto-Stitcher:** Ensambla progresivamente los fragmentos de video renderizados en un único archivo.
+* **🛡️ VAE Safe Frame Padder:** Rellena ("acolcha") tensores incompletos clonando el último frame para salvar al VAE de un colapso en modelos restrictivos (ej. reglas 4n+1).
+* **💉 LTXV Single Frame Injector:** Inyecta frames individuales específicos requeridos por flujos de LTX.
+* **⏱️ Auto FPS Limiter:** Limita de manera inteligente los cuadros por segundo para ahorrar VRAM manteniendo sincronía de audio.
+
+### 🎵 Audio
+* **✂️ Precise Audio Slicer:** Corta el audio de forma precisa (a nivel de muestra matemática) en base a los frames de vídeo correspondientes.
+* **🎛️ Conditional Audio Router (Bypass):** Enruta el audio condicionalmente permitiendo saltar su procesamiento si no es necesario.
+
+### 📐 Herramientas de Resolución
+* **ResTool (`8x`, `16x`, `32x`, `64x`, `64xLTX`):** Calculan resoluciones óptimas basadas en límites de VRAM y las reglas geométricas (multiplicadores) de diferentes modelos (SD1.5, SDXL, WanVideo, Hunyuan, LTX).
+
+### 🧠 Gestión de Memoria / Lógica
+* **🔀 Master Switch & 🗄️ Lazy Session Cache:** Evaluación perezosa nativa; amputan rutas inactivas para que los nodos pesados ni siquiera se carguen en memoria.
+* **🧹 VRAM Defragmenter:** Purga forense de memoria (Secuencia Sagrada) que limpia la caché de CUDA/MPS y fuerza al recolector de basura (GC) de Python entre ciclos.
+* **📥 Session Image Receiver / 📤 Session Image Sender:** Retienen y transfieren imágenes en memoria a través de diferentes ciclos.
 
 ---
 
@@ -69,15 +90,8 @@ El procesamiento se divide en roles altamente especializados:
 ---
 
 ## 🚀 Aceleración por GPU (Escaneo de Rostros)
-El `VideoAnalyzerWithAudio` tiene un puerto `bbox_detector` para delegar el escaneo facial a la tarjeta gráfica:
+El `VideoAnalyzerFaceDetector` tiene un puerto `bbox_detector` para delegar el escaneo facial a la tarjeta gráfica:
 1. Instala el *Impact Pack*.
 2. Añade el nodo `UltralyticsDetectorProvider` y selecciona un modelo de rostros (ej. `face_yolov8m.pt`).
 3. Conecta su salida al puerto del Analyzer.
 *(El nodo cuenta con auto-descarga: destruirá este modelo de la VRAM al terminar para hacer hueco a la generación).*
-
----
-
-## 📝 Changelog Reciente
-* **v1.6.0:** Implementación del `VAESafeFramePadder` (Hold Last Frame) y rediseño matemático a modo Expansión. Adiós a los recortes de audio y a los cuelgues en el ciclo final de WanVideo y LTX.
-* **v1.5.4:** Inyección de la variable de entorno de PyTorch `max_split_size_mb:128` para evitar la micro-fragmentación de VRAM con kernels de Triton (SageAttention). Auto-descarga temprana de modelos YOLO.
-* **v1.5.3:** "Secuencia Sagrada" en el VRAM Defragmenter (Romper ciclos -> Evacuación Suave -> Limpieza IPC -> Sincronización de hilos).
