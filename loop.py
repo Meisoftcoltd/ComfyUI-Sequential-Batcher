@@ -418,7 +418,7 @@ class SequentialLoopTrigger:
                         if is_final_chunk and has_more_batches:
                             inputs["loop_idx"] = 0
                             inputs["reset_loop"] = True
-
+                        else:
                             inputs["loop_idx"] = next_loop
                             inputs["reset_loop"] = False
 
@@ -463,9 +463,8 @@ class SequentialLoopTrigger:
             gc.collect()
             if torch.cuda.is_available(): torch.cuda.empty_cache()
 
-
+        else:
             print(f"   -> 🏁 ¡Generación Finalizada! Todos los archivos del lote completados.")
-            # ... Mantener aquí el código existente de limpieza extrema de VRAM (mm.unload_all_models, malloc_trim, etc.) ...
             print(f"   -> 🧹 Iniciando vaciado automático de VRAM...")
             import gc
             import torch

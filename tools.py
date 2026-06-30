@@ -465,6 +465,7 @@ class SaveSceneKeyframe:
 
         import os, numpy as np
         from PIL import Image
+        from . import loop
 
         img_array = 255. * image[0].cpu().numpy()
         img = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
@@ -473,6 +474,10 @@ class SaveSceneKeyframe:
             os.rmdir(file_path) # Borra la carpeta fantasma creada por WAS
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         img.save(file_path) # Ahora sí, guarda la imagen (sobrescribiendo si existe)
+
+        # 🧠 HACK DE RELOJ (Art Flow): Marca la escena como terminada para que el Director avance.
+        loop.global_is_final_chunk = True
+
         print(f"💾 [Keyframe Saver] Guardado con éxito en: {file_path}")
         return (image, file_path)
 
