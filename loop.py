@@ -646,53 +646,61 @@ class DynamicSceneDirector:
         log_output = []
         def _log(msg): print(msg); log_output.append(str(msg))
         from . import loop
-        import os, folder_paths, json, math
+        import os, folder_paths, json, math, re
 
         idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
 
         _log(f"\n{'='*50}")
         _log(f"🎬 [Director] Evaluando Ciclo: {idx}")
 
-        try:
-            data = json.loads(agent_json)
-            scenes = data.get("scenes", [])
+        base_output = folder_paths.get_output_directory()
+        safe_audio_name = "".join(c for c in audio_filename if c.isalnum() or c in " _-").strip() or "proyecto"
+        plan_path = os.path.join(base_output, f"{safe_audio_name}_plan.json")
 
-            base_output = folder_paths.get_output_directory()
-            safe_audio_name = "".join(c for c in audio_filename if c.isalnum() or c in " _-").strip() or "proyecto"
-            plan_path = os.path.join(base_output, f"{safe_audio_name}_plan.json")
+        # 1. 🛡️ GESTIÓN DEL JSON (Ignora a Ollama a partir del ciclo 1)
+        if idx == 0:
+            try:
+                # Extracción robusta por si el LLM añade texto extra
+                json_match = re.search(r'\{.*\}', agent_json, re.DOTALL)
+                raw_json = json_match.group() if json_match else agent_json
+                data = json.loads(raw_json)
 
-            with open(plan_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
+                with open(plan_path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=2)
+                _log(f"   -> 💾 Plan maestro guardado en: {plan_path}")
+            except Exception as e:
+                raise ValueError(f"❌ Error al interpretar el JSON del Agente: {e}")
+        else:
+            try:
+                with open(plan_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                _log(f"   -> ♻️ Plan recuperado del disco (Ignorando entrada del Agente).")
+            except Exception as e:
+                raise ValueError(f"❌ Error al leer el JSON guardado en {plan_path}: {e}")
 
-        except Exception as e:
-            raise ValueError(f"❌ Error en JSON: {e}")
-
+        scenes = data.get("scenes", [])
         total_scenes = len(scenes)
         if total_scenes == 0: raise ValueError("❌ JSON sin escenas.")
 
-        # 🧠 NUEVA MÁQUINA DE ESTADOS (Por Escena y Chunks)
+        # 2. ⏱️ MÁQUINA DE ESTADOS (1 Ciclo = 1 Escena)
         if idx == 0:
             loop.global_current_scene_index = 0
-            loop.global_accumulated_frames = 0
-            loop.global_audio_offset_frames = 0
-            loop.global_is_final_chunk = False
             _log("   -> 🆕 Inicio de Proyecto. Estado reseteado.")
-
-        elif getattr(loop, 'global_is_final_chunk', False):
-            loop.global_audio_offset_frames = getattr(loop, 'global_audio_offset_frames', 0) + getattr(loop, 'global_source_frame_count', 0)
+        else:
             loop.global_current_scene_index = getattr(loop, 'global_current_scene_index', 0) + 1
-            loop.global_accumulated_frames = 0
-            loop.global_is_final_chunk = False
-            _log("   -> ⏭️ Escena terminada. Avanzando a la siguiente escena del guion.")
 
-
-        scene_idx = getattr(loop, 'global_current_scene_index', 0)
+        scene_idx = loop.global_current_scene_index
 
         if scene_idx >= total_scenes:
             scene_idx = total_scenes - 1
             loop.global_is_absolute_video_final = True
         else:
             loop.global_is_absolute_video_final = False
+
+        # 3. 🧠 ENGAÑO AL STITCHER Y AL TRIGGER
+        # Obligamos a que el sistema avance escena por escena
+        loop.global_source_frame_count = total_scenes
+        loop.global_accumulated_frames = scene_idx
 
         scene = scenes[scene_idx]
 
@@ -706,11 +714,9 @@ class DynamicSceneDirector:
         duration = scene.get("duration_seconds", 5.0)
         chunk_frames = math.ceil(duration * fps)
 
-        loop.global_source_frame_count = chunk_frames
-
         _log(f"   -> 🎬 Procesando Escena {scene_idx + 1}/{total_scenes} ({duration}s)")
-
         _log(f"{'='*50}\n")
+
         return (flux_prompt, wan_prompt, chunk_frames, image_path, plan_path)
 
 @register_node
