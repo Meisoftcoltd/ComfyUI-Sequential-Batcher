@@ -1,7 +1,7 @@
 [project]
-name = "sequential-batcher"
-description = ""
-version = "1.0.0"
+name = "Sequential-Batcher"
+description = "A professional-grade suite of custom nodes for ComfyUI. Designed to bypass extreme VRAM limits in heavy video generation (WanVideo, Hunyuan, LTX) through Recursive Auto-Queuing, autonomous batch-by-batch processing, and forensic memory management."
+version = "0.8.3"
 license = "MIT" 
 # classifiers = [
 #     # For OS-independent nodes (works on all operating systems)
