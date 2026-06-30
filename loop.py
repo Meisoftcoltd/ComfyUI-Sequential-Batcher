@@ -99,7 +99,7 @@ class SequentialLoopStart:
             global_ltx_mode = False
             print("   -> 🔄 Bucle y Acumulador reiniciados a 0.")
             # HACK: Mantenemos global_is_batch_advancing = True durante el ciclo 0
-
+        else:
             global_loop_index = loop_idx
             # Lo apagamos a partir del ciclo 1
             global_is_batch_advancing = False
