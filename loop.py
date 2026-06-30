@@ -87,21 +87,15 @@ class SequentialLoopStart:
 
         is_reset = str(reset_loop).lower() in ['true', '1', 't', 'y']
 
-        # 💡 FIX: Detectar si es un arranque manual del usuario para resetear el lote
-        if loop_idx == 0 and not is_reset:
-            global_is_batch_advancing = False
-            global_batch_index = 0
-            print("   -> 🆕 Arranque manual detectado. Lote (Batch) reiniciado a 0.")
-
         if is_reset or loop_idx == 0:
             global_loop_index = 0
             global_accumulated_frames = 0
             global_ltx_mode = False
+            global_is_batch_advancing = False
+            global_batch_index = 0
             print("   -> 🔄 Bucle y Acumulador reiniciados a 0.")
-            # HACK: Mantenemos global_is_batch_advancing = True durante el ciclo 0
         else:
             global_loop_index = loop_idx
-            # Lo apagamos a partir del ciclo 1
             global_is_batch_advancing = False
 
         print(f"   -> 📍 Índice actual de bucle: {global_loop_index}")
@@ -151,25 +145,11 @@ class AutoLoopCalculatorTTSBatch:
         mode = split_mode[0] if isinstance(split_mode, list) else split_mode
         idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
 
-        # 💡 FIX: Detección inteligente de nuevos flujos mediante Hash
-        current_hash = hash(str(texts))
-        last_hash = getattr(loop, 'global_last_text_hash', None)
+        # El batch index es extraído directamente de idx para evitar bloqueos
+        current_batch_idx = idx
 
-        if idx == 0:
-            if current_hash != last_hash:
-                _log("   -> 🆕 Nuevo texto detectado. Forzando reinicio del lote (Batch) a 0.")
-                loop.global_batch_index = 0
-                loop.global_is_batch_advancing = False
-                loop.global_last_text_hash = current_hash
-            elif not getattr(loop, 'global_is_batch_advancing', False):
-                loop.global_batch_index = 0
-
-        current_batch_idx = getattr(loop, 'global_batch_index', 0)
-
-        # Seguridad adicional por si el índice se desborda por cachés antiguos
         if current_batch_idx >= len(texts):
             current_batch_idx = len(texts) - 1
-            loop.global_batch_index = current_batch_idx
 
         current_file_text = texts[current_batch_idx]
         current_name = names[current_batch_idx] if current_batch_idx < len(names) else "unknown"
@@ -443,10 +423,8 @@ class SequentialLoopTrigger:
                     inputs["is_final_cycle"] = is_next_final
 
                 if is_final_chunk and has_more_batches:
-                    loop.global_batch_index = getattr(loop, 'global_batch_index', 0) + 1
-                    loop.global_is_batch_advancing = True
-                    print(f"   -> 📦 Archivo finalizado. Iniciando archivo {loop.global_batch_index + 1} del lote...")
-
+                    print(f"   -> 📦 Archivo finalizado. Iniciando siguiente archivo del lote...")
+                else:
                     print(f"   -> ⚙️ Preparando Ciclo {next_loop}...")
 
             p = {"prompt": prompt}
@@ -459,31 +437,8 @@ class SequentialLoopTrigger:
             except Exception as e:
                 print(f"   -> ❌ Error HTTP: {e}")
 
-            import gc, torch
-            gc.collect()
-            if torch.cuda.is_available(): torch.cuda.empty_cache()
-
         else:
             print(f"   -> 🏁 ¡Generación Finalizada! Todos los archivos del lote completados.")
-            print(f"   -> 🧹 Iniciando vaciado automático de VRAM...")
-            import gc
-            import torch
-            import comfy.model_management as mm
-            try:
-                mm.unload_all_models()
-                mm.soft_empty_cache()
-            except Exception as e:
-                pass
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.ipc_collect()
-                import ctypes
-                try: ctypes.CDLL('libc.so.6').malloc_trim(0)
-                except Exception: pass
-            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-                torch.mps.empty_cache()
-            print(f"   -> ✨ VRAM liberada con éxito. Gráfica lista para nuevos flujos.")
 
         print(f"{'='*50}\n")
         return ()
@@ -586,37 +541,23 @@ class AudioBatchSelector:
 
         idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
 
-        current_hash = hash(str(names))
-        last_hash = getattr(loop, 'global_last_audio_hash', None)
-
-        if idx == 0:
-            if current_hash != last_hash:
-                _log("   -> 🆕 Nuevo lote de audios detectado. Reiniciando Batch a 0.")
-                loop.global_batch_index = 0
-                loop.global_is_batch_advancing = False
-                loop.global_last_audio_hash = current_hash
-            elif not getattr(loop, 'global_is_batch_advancing', False):
-                loop.global_batch_index = 0
-
-        current_batch_idx = getattr(loop, 'global_batch_index', 0)
+        # Extraer el índice del lote basado en el input (el motor Trigger/Start maneja los índices)
+        # Como este nodo es ahora sólo de lectura, current_loop_index determinará el archivo a cargar.
+        current_batch_idx = idx
 
         if current_batch_idx >= len(audios):
             current_batch_idx = len(audios) - 1
-            loop.global_batch_index = current_batch_idx
 
         current_audio = audios[current_batch_idx]
         current_name = names[current_batch_idx]
         total_audios = len(audios)
 
-        # Control de comunicación con el Trigger final
         loop.global_has_more_batches = (current_batch_idx < total_audios - 1)
 
         _log(f"\n{'='*50}")
         _log(f"🎛️ [Secuencial Batcher] NODO: Audio Batch Selector")
         _log(f"   -> Lote (Batch) Actual: {current_batch_idx + 1} de {total_audios}")
-        _log(f"   -> Ciclo interno del video: {idx}")
         _log(f"   -> Archivo activo: {current_name}")
-        _log(f"   -> Quedan archivos en el lote: {'Sí' if loop.global_has_more_batches else 'No'}")
         _log(f"{'='*50}\n")
 
         return (current_audio, current_name, current_batch_idx, total_audios, "\n".join(log_output))
@@ -683,24 +624,11 @@ class DynamicSceneDirector:
         if total_scenes == 0: raise ValueError("❌ JSON sin escenas.")
 
         # 2. ⏱️ MÁQUINA DE ESTADOS (1 Ciclo = 1 Escena)
-        if idx == 0:
-            loop.global_current_scene_index = 0
-            _log("   -> 🆕 Inicio de Proyecto. Estado reseteado.")
-        else:
-            loop.global_current_scene_index = getattr(loop, 'global_current_scene_index', 0) + 1
-
-        scene_idx = loop.global_current_scene_index
+        # El director es un observador pasivo, scene_idx se deriva directamente de idx
+        scene_idx = idx
 
         if scene_idx >= total_scenes:
             scene_idx = total_scenes - 1
-            loop.global_is_absolute_video_final = True
-        else:
-            loop.global_is_absolute_video_final = False
-
-        # 3. 🧠 ENGAÑO AL STITCHER Y AL TRIGGER
-        # Obligamos a que el sistema avance escena por escena
-        loop.global_source_frame_count = total_scenes
-        loop.global_accumulated_frames = scene_idx
 
         scene = scenes[scene_idx]
 
