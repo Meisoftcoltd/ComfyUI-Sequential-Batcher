@@ -1,7 +1,6 @@
 import torch
 import gc
 import comfy.model_management as mm
-import os
 from . import register_node
 
 class AnyType(str):
