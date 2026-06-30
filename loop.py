@@ -810,4 +810,6 @@ class IncrementalVideoStitcher:
 
             return (final_tensor, final_audio, True, not has_more_batches, "\n".join(log_output))
 
-            return (images[-1:].clone(), None, False, False, "\n".join(log_output))
+        # 💡 FIX: Retorno de seguridad para ciclos intermedios
+        # Devolvemos el último frame procesado para que el flujo no rompa
+        return (images[-1:].clone(), None, False, False, "\n".join(log_output))
