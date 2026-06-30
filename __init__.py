@@ -1,4 +1,4 @@
-__version__ = "1.6.0"
+__version__ = "0.8.3"
 
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
