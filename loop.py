@@ -638,8 +638,8 @@ class DynamicSceneDirector:
             }
         }
 
-    RETURN_TYPES = ("STRING", "STRING", "INT", "STRING")
-    RETURN_NAMES = ("flux_prompt", "wan_prompt", "chunk_frames", "image_load_path")
+    RETURN_TYPES = ("STRING", "STRING", "INT", "STRING", "STRING")
+    RETURN_NAMES = ("flux_prompt", "wan_prompt", "chunk_frames", "image_load_path", "project_json_path")
     FUNCTION = "direct_scene"
     CATEGORY = "🔁 Sequential Batcher/Director"
 
@@ -657,6 +657,14 @@ class DynamicSceneDirector:
         try:
             data = json.loads(agent_json)
             scenes = data.get("scenes", [])
+
+            base_output = folder_paths.get_output_directory()
+            safe_audio_name = "".join(c for c in audio_filename if c.isalnum() or c in " _-").strip() or "proyecto"
+            plan_path = os.path.join(base_output, f"{safe_audio_name}_plan.json")
+
+            with open(plan_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+
         except Exception as e:
             raise ValueError(f"❌ Error en JSON: {e}")
 
@@ -689,8 +697,6 @@ class DynamicSceneDirector:
 
         scene = scenes[scene_idx]
 
-        base_output = folder_paths.get_temp_directory()
-        safe_audio_name = "".join(c for c in audio_filename if c.isalnum() or c in " _-").strip() or "proyecto"
         keyframes_dir = os.path.join(base_output, f"{safe_audio_name}_Keyframes")
         os.makedirs(keyframes_dir, exist_ok=True)
 
@@ -706,7 +712,7 @@ class DynamicSceneDirector:
         _log(f"   -> 🎬 Procesando Escena {scene_idx + 1}/{total_scenes} ({duration}s)")
 
         _log(f"{'='*50}\n")
-        return (flux_prompt, wan_prompt, chunk_frames, image_path)
+        return (flux_prompt, wan_prompt, chunk_frames, image_path, plan_path)
 
 @register_node
 class IncrementalVideoStitcher:
