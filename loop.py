@@ -91,8 +91,6 @@ class SequentialLoopStart:
             global_loop_index = 0
             global_accumulated_frames = 0
             global_ltx_mode = False
-            global_is_batch_advancing = False
-            global_batch_index = 0
             print("   -> 🔄 Bucle y Acumulador reiniciados a 0.")
         else:
             global_loop_index = loop_idx
@@ -541,9 +539,8 @@ class AudioBatchSelector:
 
         idx = current_loop_index[0] if isinstance(current_loop_index, list) else current_loop_index
 
-        # Extraer el índice del lote basado en el input (el motor Trigger/Start maneja los índices)
-        # Como este nodo es ahora sólo de lectura, current_loop_index determinará el archivo a cargar.
-        current_batch_idx = idx
+        # 🧠 FIX: El archivo lo dicta el índice de lote global, NO el índice de ciclo (que es para escenas)
+        current_batch_idx = getattr(loop, 'global_batch_index', 0)
 
         if current_batch_idx >= len(audios):
             current_batch_idx = len(audios) - 1
@@ -632,6 +629,13 @@ class DynamicSceneDirector:
 
         scene = scenes[scene_idx]
 
+        # 🧠 REGLA APLICADA: Este nodo actúa como "Calculator" del flujo JSON
+        loop.global_step_by_chunk = True
+        loop.global_source_frame_count = total_scenes
+        loop.global_accumulated_frames = scene_idx + 1
+        loop.global_is_final_chunk = (scene_idx + 1) >= total_scenes
+        loop.global_is_absolute_video_final = loop.global_is_final_chunk
+
         keyframes_dir = os.path.join(base_output, f"{safe_audio_name}_Keyframes")
         os.makedirs(keyframes_dir, exist_ok=True)
 
@@ -706,7 +710,12 @@ class IncrementalVideoStitcher:
         stride = getattr(loop, 'global_select_every_nth', 1)
         ltx_mode = getattr(loop, 'global_ltx_mode', False)
         advanced_frames = max(1, (frames_accepted - 1) * stride) if ltx_mode else frames_accepted * stride
-        loop.global_accumulated_frames += advanced_frames
+
+        # 🧠 PROTECCIÓN: Solo el Stitcher suma frames si NO estamos en modo Chunk (Director/TTS)
+        is_chunk_mode = getattr(loop, 'global_step_by_chunk', False)
+        if not is_chunk_mode:
+            loop.global_accumulated_frames += advanced_frames
+            loop.global_is_final_chunk = loop.global_accumulated_frames >= getattr(loop, 'global_source_frame_count', 1)
 
         is_absolute_final = getattr(loop, 'global_is_absolute_video_final', False) and getattr(loop, 'global_is_final_chunk', False)
         has_more_batches = getattr(loop, 'global_has_more_batches', False)
