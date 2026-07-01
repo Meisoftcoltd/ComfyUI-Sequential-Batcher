@@ -48,7 +48,8 @@ NODE_DISPLAY_NAME_MAPPINGS.update({
     "PreciseAudioSlicer": "✂️ Precise Audio Slicer",
     "SaveSceneKeyframe": "💾 Save Scene Keyframe",
     "LoadSceneKeyframe": "🖼️ Load Scene Keyframe",
-    "LTXVSingleFrameInjector": "💉 LTXV Single Frame Injector"
+    "LTXVSingleFrameInjector": "💉 LTXV Single Frame Injector",
+    "ProjectPlanLoader": "📂 Project Plan Loader"
 })
 
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
