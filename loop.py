@@ -756,3 +756,58 @@ class IncrementalVideoStitcher:
         # 💡 FIX: Retorno de seguridad para ciclos intermedios
         # Devolvemos el último frame procesado para que el flujo no rompa
         return (images[-1:].clone(), None, False, False, "\n".join(log_output))
+
+@register_node
+class ProjectPlanLoader:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "audio_filename": ("STRING", {"forceInput": True, "tooltip": "Conectar al 'current_file_name' del Audio Batch Selector"}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "INT", "STRING")
+    RETURN_NAMES = ("agent_json", "scene_count", "plan_path")
+    FUNCTION = "load_plan"
+    CATEGORY = "🔁 Sequential Batcher/Director"
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        # Queremos que siempre lea el archivo más reciente del disco
+        import time
+        return time.time()
+
+    def load_plan(self, audio_filename):
+        log_output = []
+        def _log(msg): print(msg); log_output.append(str(msg))
+
+        import os
+        import json
+        import folder_paths
+
+        _log(f"\n{'='*50}")
+        _log(f"📂 [Plan Loader] Buscando proyecto para: {audio_filename}")
+
+        # La misma lógica exacta del DynamicSceneDirector
+        base_output = folder_paths.get_output_directory()
+        safe_audio_name = "".join(c for c in audio_filename if c.isalnum() or c in " _-").strip() or "proyecto"
+        plan_path = os.path.join(base_output, f"{safe_audio_name}_plan.json")
+
+        if not os.path.exists(plan_path):
+            raise ValueError(f"❌ Error: No se encontró el plan de proyecto en {plan_path}. Asegúrate de que el Flujo 1 lo haya generado.")
+
+        with open(plan_path, 'r', encoding='utf-8') as f:
+            raw_json = f.read()
+
+        try:
+            data = json.loads(raw_json)
+            scenes = data.get("scenes", [])
+            scene_count = len(scenes)
+        except Exception as e:
+            raise ValueError(f"❌ Error al interpretar el JSON guardado en {plan_path}: {e}")
+
+        _log(f"   -> ✅ Plan cargado con éxito. Escenas detectadas: {scene_count}")
+        _log(f"{'='*50}\n")
+
+        return (raw_json, scene_count, plan_path)
