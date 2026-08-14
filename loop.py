@@ -167,7 +167,7 @@ class AutoLoopCalculatorTTSBatch:
                 if raw_chunks: raw_chunks[-1] += " " + buffer_text
                 else: raw_chunks.append(buffer_text)
             chunk_type_name = "Frases Optimizadas"
-
+        else:
             raw_chunks = [p.strip() for p in current_file_text.split('\n') if p.strip()]
             chunk_type_name = "Párrafos"
 
